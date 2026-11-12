@@ -40,7 +40,7 @@ Business-rule 422 codes (suggested; define them as you implement): `target_out_o
 
 `200`
 ```json
-[{"id": 1, "display_name": "User A"}, {"id": 2, "display_name": "User B"}]
+[{"id": 1, "display_name": "Yinkun"}, {"id": 2, "display_name": "Ruiping"}]
 ```
 
 ---
@@ -161,7 +161,7 @@ Response `200`
   "entries": [
     {
       "user_id": 1,
-      "display_name": "User A",
+      "display_name": "Yinkun",
       "duration_seconds": 15780,
       "rank": 1,
       "data_status": "available",
@@ -170,7 +170,7 @@ Response `200`
     },
     {
       "user_id": 2,
-      "display_name": "User B",
+      "display_name": "Ruiping",
       "duration_seconds": null,
       "rank": null,
       "data_status": "no_data",
