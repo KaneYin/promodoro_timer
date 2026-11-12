@@ -1,0 +1,17 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local data: never commit databases, backups or real user data
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite3
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

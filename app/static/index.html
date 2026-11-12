@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Focus Tracker</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🍅%3C/text%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body data-phase="idle">
+    <header class="topbar">
+      <div class="brand"><span aria-hidden="true">🍅</span> Focus Tracker</div>
+      <div class="topbar-right">
+        <label class="user-picker">
+          <span class="sr-only">Current user</span>
+          <select id="user-select" aria-label="Current user"></select>
+        </label>
+        <span id="connection" class="connection" data-online="false" role="status">
+          <span class="dot" aria-hidden="true"></span><span id="connection-text">Connecting…</span>
+        </span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <div id="sync-banner" class="banner" role="status" hidden></div>
+
+      <section class="card timer-card" aria-labelledby="timer-title">
+        <h2 id="timer-title" class="sr-only">Pomodoro timer</h2>
+        <div class="dial">
+          <svg viewBox="0 0 120 120" aria-hidden="true">
+            <circle class="ring-track" cx="60" cy="60" r="54" />
+            <circle id="ring-progress" class="ring-progress" cx="60" cy="60" r="54" />
+          </svg>
+          <div class="dial-text">
+            <div id="phase" class="phase">Ready</div>
+            <div id="clock" class="clock" aria-live="off">25:00</div>
+          </div>
+        </div>
+        <div class="controls">
+          <button id="btn-primary" class="btn btn-primary" type="button" data-action="start">Start</button>
+          <button id="btn-reset" class="btn" type="button" disabled>Reset</button>
+        </div>
+        <p id="timer-hint" class="hint"></p>
+      </section>
+
+      <section class="card" aria-labelledby="stats-title">
+        <h2 id="stats-title">Your stats</h2>
+        <dl class="stats">
+          <div class="stat"><dt>Sessions today</dt><dd id="stat-count">—</dd></div>
+          <div class="stat"><dt>Focus today</dt><dd id="stat-today">—</dd></div>
+          <div class="stat"><dt>Focus this week</dt><dd id="stat-week">—</dd></div>
+          <div class="stat">
+            <dt>Screen time today</dt>
+            <dd id="stat-screen">—</dd>
+            <small id="stat-screen-sync"></small>
+          </div>
+        </dl>
+      </section>
+
+      <section id="leaderboard" class="card" aria-labelledby="lb-title">
+        <h2 id="lb-title">Leaderboards</h2>
+
+        <div class="tabs" role="tablist" aria-label="Metric">
+          <button class="tab" role="tab" data-metric="focus" aria-selected="true" type="button">Focus</button>
+          <button class="tab" role="tab" data-metric="screen" aria-selected="false" type="button">Screen Time</button>
+        </div>
+
+        <div class="toolbar">
+          <div class="segmented" role="group" aria-label="Period">
+            <button data-period="day" aria-pressed="true" type="button">Daily</button>
+            <button data-period="week" aria-pressed="false" type="button">Weekly</button>
+            <button data-period="month" aria-pressed="false" type="button">Monthly</button>
+          </div>
+          <div id="order-row" class="segmented" role="group" aria-label="Order" hidden>
+            <button data-order="asc" aria-pressed="true" type="button">Least first</button>
+            <button data-order="desc" aria-pressed="false" type="button">Most first</button>
+          </div>
+        </div>
+
+        <div id="lb-range" class="range"></div>
+        <ol id="lb-list" class="lb-list" aria-live="polite"></ol>
+        <p id="lb-notice" class="notice" hidden></p>
+        <div id="lb-updated" class="updated"></div>
+      </section>
+    </main>
+
+    <script type="module" src="/js/app.js"></script>
+  </body>
+</html>
