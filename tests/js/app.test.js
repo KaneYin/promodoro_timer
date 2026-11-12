@@ -32,7 +32,7 @@ async function boot({usersAvailable=true}={}) {
   globalThis.fetch=async url=>{
     if(url.pathname==="/api/users"){userCalls++;if(!usersAvailable)throw Error("offline");}
     if(!online)throw Error("offline");
-    const data=url.pathname==="/api/users"?[{id:1,display_name:"User A"},{id:2,display_name:"User B"}]:url.pathname==="/api/health"?{status:"ok"}:url.pathname==="/api/focus-sessions"?[{focus_seconds:1500}]:{metric:url.searchParams.get("metric"),period_start:"2026-11-11",period_end_exclusive:"2026-11-12",timezone:"America/Chicago",entries:[{user_id:1,display_name:"User A",duration_seconds:1500,rank:1,data_status:"available",days_with_data:1,days_expected:1}]};
+    const data=url.pathname==="/api/users"?[{id:1,display_name:"Yinkun"},{id:2,display_name:"Ruiping"}]:url.pathname==="/api/health"?{status:"ok"}:url.pathname==="/api/focus-sessions"?[{focus_seconds:1500}]:{metric:url.searchParams.get("metric"),period_start:"2026-11-11",period_end_exclusive:"2026-11-12",timezone:"America/Chicago",entries:[{user_id:1,display_name:"Yinkun",duration_seconds:1500,rank:1,data_status:"available",days_with_data:1,days_expected:1}]};
     return {ok:true,json:async()=>data};
   };
   await import(`../../app/static/js/app.js?test=${Math.random()}`);

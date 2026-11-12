@@ -6,9 +6,9 @@
 -- database exists, rename via UPDATE instead of editing this file.
 
 INSERT OR IGNORE INTO users (id, display_name) VALUES
-    (1, 'User A'),
-    (2, 'User B');
+    (1, 'Yinkun'),
+    (2, 'Ruiping');
 
 INSERT OR IGNORE INTO devices (id, user_id, device_name, timezone) VALUES
-    ('15ba172f-e397-4155-8285-6757a75875f1', 1, 'User A MacBook', 'America/Chicago'),
-    ('7145d42c-2b23-4dd3-aefc-7e81012db968', 2, 'User B MacBook', 'America/Chicago');
+    ('15ba172f-e397-4155-8285-6757a75875f1', 1, 'Yinkun MacBook', 'America/Chicago'),
+    ('7145d42c-2b23-4dd3-aefc-7e81012db968', 2, 'Ruiping MacBook', 'America/Chicago');
