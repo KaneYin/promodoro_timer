@@ -1,113 +1,69 @@
-# Implementation Guide: the parts left for you
+# Learning guide: scaffold to reference
 
-Everything not listed here is done: schema, DB connection, Pydantic models, all routers, error mapping, the whole frontend, the agent loop and HTTP client, backup script.
+`main` contains the original ten TODO functions. This branch implements them and fixes the surrounding bugs. Use separate practice/reference branches so your own work remains intact. The complete specification is [design.md](design.md), with exact payloads in [api.md](api.md).
 
-Every missing function raises `NotImplementedError("TODO(core): <name>")`, which the API returns as `501`. Find them all with:
+## Suggested implementation order
 
-```bash
-grep -rn "TODO(core)" app agent
-```
+| Step | File / functions | What to check before continuing |
+|---|---|---|
+| 1 | `app/periods.py`: `local_midnight_utc`, `resolve_window` | DST days, Monday weeks, December rollover |
+| 2 | `app/services/focus_service.py`: `save_focus_session` | Validation, same-id retry, conflicting content, concurrent requests |
+| 3 | `app/services/focus_service.py`: `list_focus_sessions` | Inclusive dates, UTC conversion, open-ended bounds |
+| 4 | `app/services/leaderboard_service.py`: `focus_entries` | Every user appears, including zero |
+| 5 | `app/services/leaderboard_service.py`: `rank_entries` | Ascending/descending, ties, unranked groups |
+| 6 | `agent/collector.py`: `discover_buckets`, `compute_active_seconds` | Same-host pair, window intersected with not-AFK, no fake zeros |
+| 7 | `app/services/screen_time_service.py`: `upsert_daily_usage` | Newer snapshots overwrite; stale requests do nothing |
+| 8 | `app/services/leaderboard_service.py`: `screen_entries` | Real zero, missing data, partial dates, today's freshness |
 
-Each stub's docstring is the contract. This guide adds order, hints and pitfalls. Hints describe approaches, not finished code.
+After step 5, Focus can work end to end. Test the ActivityWatch query locally before enabling automatic uploads.
 
-## Suggested order
+## Why the reference makes these choices
 
-| # | File · function | Lab | Unblocks |
-|---|---|---|---|
-| 1 | `app/periods.py` · `local_midnight_utc`, `resolve_window` | 4 | everything date-related |
-| 2 | `app/services/focus_service.py` · `save_focus_session` | 4 | saving Pomodoros |
-| 3 | `app/services/focus_service.py` · `list_focus_sessions` | 4 | "Sessions today" stats |
-| 5 | `app/services/leaderboard_service.py` · `focus_entries` | 4 | Focus leaderboard |
-| 7 | `app/services/leaderboard_service.py` · `rank_entries` | 4 | rank numbers |
-| 8 | `agent/collector.py` · `discover_buckets`, `compute_active_seconds` | 1, 5 | real Screen Time data |
-| 4 | `app/services/screen_time_service.py` · `upsert_daily_usage` | 5 | storing agent uploads |
-| 6 | `app/services/leaderboard_service.py` · `screen_entries` | 6 | Screen Time leaderboard |
+### Calendar windows
 
-After steps 1, 2, 3, 5 and 7, the Focus half of the app works in the browser. The design doc's Lab 1 (ActivityWatch PoC) fits naturally as step 8 before anything else on the Screen Time side.
+Compute local calendar dates first, construct each boundary at local midnight, then convert each to UTC. Never derive tomorrow's UTC midnight by adding 24 hours. In Chicago, 2026-03-08 is 23 hours and 2026-11-01 is 25 hours. `resolve_window` uses half-open boundaries; history's inclusive end date becomes the next local midnight.
 
----
+### Focus saving and errors
 
-## 1. Period windows (`app/periods.py`)
+The UUID is the idempotency key. Normalize offsets and truncate microseconds before comparing every stored field. The reference acquires `BEGIN IMMEDIATE` before lookup and insert, so two writers cannot both decide an id is new. The transaction context commits on success and rolls back on exceptions. Identical saved retries return success even if validation settings changed later.
 
-- `local_midnight_utc(d, tz)`: build an aware `datetime` at 00:00 in `tz`, convert to UTC. Do not add 24 h to anything.
-- `resolve_window`: compute local dates first (Monday = `anchor - timedelta(days=anchor.weekday())`; month start and next month start), then convert only the two boundaries to UTC.
-- Check with dates around DST: in `America/Chicago` the clocks change on 2026-03-08 and 2026-11-01. The week of 2026-11-01 is 169 hours long, and the Sunday itself is 25 hours.
-- December needs a year rollover for "first of next month".
+Exception constructors accept `(message, code=None)`. Write `NotFoundError("User does not exist", code="user_not_found")`; a positional `"user_not_found"` alone changes the message, not the machine code.
 
-## 2. `save_focus_session`
+### Aggregation and missing data
 
-- Check user existence with a `SELECT`. Business rules come before the insert.
-- Idempotency: look up the id first. If a row exists, compare **all** fields. Equal -> return success. Different -> `ConflictError`.
-- Race: two identical requests can arrive at once (two tabs). A `SELECT` then `INSERT` can lose the race and hit the primary key. Handle `sqlite3.IntegrityError` on the insert by re-reading and comparing, or use `INSERT ... ON CONFLICT DO NOTHING` and inspect `rowcount`.
-- Store `to_utc_iso(payload.started_at_utc)` and `str(payload.id)`.
-- Use `with conn:` so the write commits or rolls back.
+Keep time predicates inside a `LEFT JOIN`'s `ON` clause to preserve empty users. For Focus, `COALESCE(SUM(...), 0)` is correct. For Screen Time, first determine whether any right-side rows exist: `COUNT(s.usage_date)` works; `COUNT(*)` does not, because even an unmatched left join contributes a row. The reference groups joined daily rows in Python to make coverage and freshness explicit.
 
-## 3. `list_focus_sessions`
+Screen data has two independent checks: coverage of elapsed dates, and freshness of today's row. Historical reuploads must not refresh today. See the exact status precedence in [design.md](design.md). Only `available` entries receive competition ranks; sorting ties by user id makes output stable. Ranking returns copies instead of mutating its inputs.
 
-- End bound is **inclusive** at the API but the SQL window is half-open: `local_midnight_utc(end_date + 1 day)`.
-- Build the WHERE clause conditionally for missing bounds, but keep every value parameterised (`?`).
+### Screen snapshots
 
-## 4. `upsert_daily_usage`
+Use one row per `(device_id, usage_date)`. A newer collection replaces the total, even if the new value is lower. Older or equal timestamps leave all columns unchanged, including `synced_at_utc`. The reference uses a writer transaction so both the overwrite decision and the `created` / `updated` / `ignored_stale` result are consistent under concurrency.
 
-- The value is a snapshot. Never `active_seconds = active_seconds + ?` and never `MAX()`: totals can drop when ActivityWatch corrects history.
-- Three outcomes (`created`, `updated`, `ignored_stale`). Decide in one statement if you can. An `INSERT ... ON CONFLICT(device_id, usage_date) DO UPDATE SET ... WHERE excluded.collected_at_utc > screen_usage_daily.collected_at_utc` leaves `rowcount == 0` when ignored. You still need to know created vs updated, so either read first inside a transaction or compare before/after.
-- Equal `collected_at_utc` counts as stale/ignored (a retried identical request).
-- `synced_at_utc` is the server clock at write time, not the client's.
+### ActivityWatch
 
-## 5. `focus_entries`
+Pair window and AFK buckets from the same host. Build a query using exact, escaped bucket ids:
 
-- Every user must appear, including those with zero sessions. A `LEFT JOIN` where the time filter is in the **ON** clause (not WHERE) keeps users with no rows. Putting it in WHERE silently drops them.
-- Wrap the sum in `COALESCE(..., 0)`.
-- Pass the window as `to_utc_iso(window.start_utc)` and `to_utc_iso(window.end_utc)`.
+1. Fetch window events and AFK events with `flood(query_bucket(...))`.
+2. Keep `status == "not-afk"` events.
+3. Intersect window events with those periods.
+4. Return `sum_durations(events)` only.
 
-## 6. `screen_entries`
+No category settings or browser-watcher overlay is needed. Query errors and malformed results raise a collector error and skip the upload. Successful zero is different from failure. Days entirely before the required buckets existed are skipped. Partial tracking within a day cannot be detected from daily totals alone.
 
-- Same LEFT JOIN trap as above, across three tables (users -> devices -> screen_usage_daily).
-- Distinguish "no rows" (`COUNT(*) = 0` -> `no_data`, `duration_seconds=None`) from a real `0`. `SUM` of no rows is `NULL`, and `COALESCE(SUM, 0)` would erase that distinction. Check the count.
-- `usage_date` is text, so `usage_date >= ? AND usage_date < ?` with `window.start_date.isoformat()` works.
-- Staleness only applies if today (in the leaderboard timezone) lies inside the window. Parse `last_synced_at_utc` with `parse_utc_iso` and compare with `now`.
-- A user with a device but no rows, and a user with no device at all, are both `no_data`.
+Official references: [query examples](https://docs.activitywatch.net/en/latest/examples/querying-data.html), [Python API](https://docs.activitywatch.net/en/latest/api/python.html).
 
-## 7. `rank_entries`
+### Browser durability
 
-- Partition into available / stale / no_data first, rank only the first group.
-- Competition ranking: tied values share a rank and the following rank skips. Track the previous value and the index.
-- Sort key for ties: `user_id`, to keep output stable.
-- `order="asc"` flips the sort, not the partitioning.
+The outbox write precedes the timer's transition to Break. Every pending session has its own storage key; removing one UUID cannot overwrite a concurrent enqueue for another. Rejections are written before pending data is removed. Legacy array queues migrate automatically. Web Locks serialize timer controls between tabs where supported; the server still deduplicates replayed UUIDs.
 
-## 8. Collector (`agent/collector.py`)
-
-Do this first as the Lab 1 PoC, in a scratch script, before wiring it into the agent.
-
-- `client.get_buckets()` returns a dict keyed by bucket id such as `aw-watcher-window_<host>`. Pick by prefix or by the bucket's `type` field (`currentwindow`, `afkstatus`).
-- `aw_client.queries.canonicalEvents(DesktopQueryParams(bid_window=..., bid_afk=..., ...))` builds the window ∩ not-AFK query string. Append a final `RETURN = ...` statement; check the ActivityWatch query docs for a function that sums event durations. Run it with `client.query(query, [(start, end)])`, which returns one result per time period.
-- Note `canonicalEvents` reads category settings from the server when `classes` is empty. If that causes trouble, build the query string by hand with `flood`, `filter_keyvals`, `filter_period_intersect`.
-- Day window: aware datetimes in `cfg.timezone`, from local midnight to the next local midnight. Pass them to the client; aw-client wants aware datetimes.
-- Compare with the ActivityWatch dashboard in the same conditions (same date, no browser-watcher overlay) before trusting the number. This is the Lab 1 acceptance check.
-- Errors: wrap connection and query failures in `ActivityWatchUnavailable`. `main.py` already skips the upload when a `CollectorError` is raised, so a failure can never become a fake `0`.
-
-Run the agent once against a running server:
+## Compare and verify
 
 ```bash
-export AGENT_DEVICE_ID=<uuid from scripts/init_db.py>
-uv run --extra agent python -m agent.main --once
+git diff main..reference/complete-implementation -- app/periods.py
+git diff main..reference/complete-implementation -- app/services/focus_service.py
+uv sync --extra agent
+uv run --no-sync pytest -q
+npm test
 ```
 
----
-
-## Checking your work
-
-- API contract and edge cases: `docs/api.md`.
-- Interactive: `http://127.0.0.1:8000/docs`.
-- No tests are included. The design doc's section 13 lists what to cover, and `tests/` is yours to fill. A reasonable fixture is a temporary DB file passed through `app.config.DB_PATH` plus `TestClient(app)`.
-
-Quick manual check once focus works:
-
-```bash
-curl -s -X POST localhost:8000/api/focus-sessions -H 'content-type: application/json' -d '{
-  "id":"6f1d2b2e-8d41-4c8e-9c0a-1f7d2f0b9a11","user_id":1,
-  "started_at_utc":"2026-11-11T15:00:00Z","completed_at_utc":"2026-11-11T15:25:00Z",
-  "focus_seconds":1500,"target_seconds":1500}'
-# repeat the same command: still 200, still one row
-curl -s 'localhost:8000/api/leaderboards?metric=focus&period=day&date=2026-11-11'
-```
+Read tests as behavior examples, especially DST filtering, concurrency, decreased Screen Time totals and historical-backfill freshness. For full HTTP and browser acceptance steps, use [testing.md](testing.md).

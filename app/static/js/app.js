@@ -46,7 +46,7 @@ const secondsParam = (name) => {
   return Number.isFinite(n) && n > 0 ? n * 1000 : undefined;
 };
 
-const app = { users: [], userId: null, lastRendered: "" };
+const app = { users: [], userId: null, usersLoaded: false, statsSeq: 0, storageError: "" };
 
 // --- Timer -------------------------------------------------------------------
 
@@ -55,6 +55,7 @@ const timer = new PomodoroTimer({
   focusMs: secondsParam("focus"),
   breakMs: secondsParam("break"),
   persistCompletedSession: enqueueSession,
+  autoAdvance: false, // reconcile on boot under the same cross-tab lock as controls
 });
 
 const PHASE_LABEL = {
@@ -106,15 +107,15 @@ ui.primary.addEventListener("click", () => {
   const action = ui.primary.dataset.action;
   if (action === "start") {
     if (app.userId === null) return alert("Select a user first.");
-    timer.start(app.userId);
-  } else if (action === "pause") timer.pause();
-  else if (action === "resume") timer.resume();
+    runTimer(() => timer.start(app.userId));
+  } else if (action === "pause") runTimer(() => timer.pause());
+  else if (action === "resume") runTimer(() => timer.resume());
 });
 
 ui.reset.addEventListener("click", () => {
   const { state } = timer.snapshot();
   if ((state === State.FOCUSING || state === State.PAUSED) && !confirm("Discard this focus session? It will not be counted.")) return;
-  timer.reset();
+  runTimer(() => timer.reset());
 });
 
 timer.on("change", renderTimer);
@@ -123,17 +124,31 @@ timer.on("focus-completed", () => {
   syncAndRefresh();
 });
 
-setInterval(() => timer.tick(), 250);
+// Web Locks serialize state-changing controls/completions between tabs. The
+// per-session outbox remains safe even in browsers without Web Locks.
+async function runTimer(action = () => timer.tick()) {
+  try {
+    const perform = () => { timer.reload(); action(); };
+    if (globalThis.navigator?.locks) await navigator.locks.request("focusTracker.timer", perform);
+    else perform();
+    app.storageError = "";
+  } catch (err) {
+    app.storageError = `Cannot save timer data on this device: ${err.message}. Free browser storage before continuing.`;
+  }
+  renderSyncBanner();
+}
+
+setInterval(() => runTimer(), 250);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
-    timer.tick();
+    runTimer();
     refreshAll();
   }
 });
 // Another tab changed the timer (start/pause/reset): follow it.
 window.addEventListener("storage", (e) => {
-  if (e.key === "focusTracker.timer.v1") timer.reload();
-  if (e.key === "focusTracker.pendingSessions.v1") renderSyncBanner();
+  if (e.key === "focusTracker.timer.v1") runTimer(() => {});
+  if (e.key?.startsWith("focusTracker.pending.") || e.key?.startsWith("focusTracker.rejected.")) renderSyncBanner();
 });
 
 // --- Users -------------------------------------------------------------------
@@ -147,7 +162,9 @@ function selectUser(id) {
 async function loadUsers() {
   try {
     app.users = await getUsers();
+    app.usersLoaded = true;
   } catch {
+    if (app.users.length) return; // keep usable remembered users until the retry succeeds
     // Offline at startup: fall back to the remembered user so the timer still works.
     const saved = Number(localStorage.getItem(USER_KEY));
     app.users = saved ? [{ id: saved, display_name: `User ${saved}` }] : [];
@@ -158,6 +175,7 @@ async function loadUsers() {
   const timerUser = timer.snapshot().userId;
   const initial = [timerUser, saved].find((id) => app.users.some((u) => u.id === id)) ?? app.users[0]?.id ?? null;
   if (initial !== null) selectUser(initial);
+  renderTimer(timer.snapshot());
 }
 
 ui.userSelect.addEventListener("change", () => {
@@ -171,6 +189,7 @@ ui.userSelect.addEventListener("change", () => {
 const dash = "—";
 
 async function refreshStats() {
+  const seq = ++app.statsSeq;
   if (app.userId === null) return;
   const userId = app.userId;
   const today = todayInTimezone(LEADERBOARD_TZ);
@@ -180,7 +199,7 @@ async function refreshStats() {
     getLeaderboard({ metric: "focus", period: "week", date: today }),
     getLeaderboard({ metric: "screen", period: "day", date: today }),
   ]);
-  if (userId !== app.userId) return; // user switched while loading
+  if (userId !== app.userId || seq !== app.statsSeq) return;
 
   const mine = (r) => (r.status === "fulfilled" ? r.value.entries.find((e) => e.user_id === userId) : undefined);
 
@@ -211,6 +230,7 @@ function renderSyncBanner() {
   const pending = loadPending().length;
   const rejected = loadRejected().length;
   const parts = [];
+  if (app.storageError) parts.push(app.storageError);
   if (pending > 0) parts.push(`${pending} completed session${pending === 1 ? "" : "s"} saved on this device, waiting to sync.`);
   if (rejected > 0) parts.push(`${rejected} session${rejected === 1 ? " was" : "s were"} rejected by the server (see browser console).`);
   ui.syncBanner.hidden = parts.length === 0;
@@ -231,17 +251,30 @@ async function checkHealth() {
 function setConnection(online) {
   ui.connection.dataset.online = String(online);
   ui.connectionText.textContent = online ? "Connected" : "Offline";
+  if (!online) {
+    app.statsSeq += 1;
+    ui.statCount.textContent = ui.statToday.textContent = ui.statWeek.textContent = ui.statScreen.textContent = dash;
+    ui.statScreenSync.textContent = "Server unavailable";
+    leaderboard.setOffline();
+  }
 }
 
 async function syncAndRefresh() {
-  if (loadPending().length > 0) await flushPending();
+  try {
+    if (loadPending().length > 0) await flushPending();
+  } catch (err) {
+    app.storageError = `Cannot update the local sync queue: ${err.message}`;
+  }
   renderSyncBanner();
   refreshStats();
   leaderboard.refresh();
 }
 
 async function refreshAll() {
-  if (await checkHealth()) await syncAndRefresh();
+  if (await checkHealth()) {
+    if (!app.usersLoaded) await loadUsers();
+    await syncAndRefresh();
+  }
 }
 
 window.addEventListener("online", refreshAll);
@@ -255,6 +288,7 @@ const leaderboard = createLeaderboard({
 });
 
 (async function init() {
+  await runTimer();
   renderTimer(timer.snapshot());
   renderSyncBanner();
   await loadUsers();

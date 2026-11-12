@@ -56,6 +56,7 @@ export function createLeaderboard({ root, getCurrentUserId }) {
   function entryRow(entry, isMe, metric) {
     const noData = entry.data_status === "no_data";
     const stale = entry.data_status === "stale";
+    const partial = entry.data_status === "partial";
 
     const sub = [];
     if (metric === "screen") {
@@ -63,7 +64,7 @@ export function createLeaderboard({ root, getCurrentUserId }) {
       else {
         sub.push(`Synced ${timeAgo(entry.last_synced_at_utc)}`);
         if (state.period !== "day" && entry.days_with_data != null) {
-          sub.push(`${entry.days_with_data} day${entry.days_with_data === 1 ? "" : "s"} of data`);
+          sub.push(`${entry.days_with_data}/${entry.days_expected ?? "?"} days reported`);
         }
       }
     }
@@ -83,6 +84,7 @@ export function createLeaderboard({ root, getCurrentUserId }) {
         { class: "lb-value" },
         noData ? el("span", { class: "badge badge-muted" }, "No Data") : el("strong", {}, formatDuration(entry.duration_seconds)),
         stale && el("span", { class: "badge badge-warn" }, "Stale"),
+        partial && el("span", { class: "badge badge-warn" }, "Partial"),
       ),
     );
   }
@@ -99,7 +101,7 @@ export function createLeaderboard({ root, getCurrentUserId }) {
     notice.hidden = !hasGap;
     if (hasGap) {
       notice.textContent =
-        "Users with missing or stale data are not ranked. Missing data does not mean zero usage; it means the device has not reported.";
+        "Only complete, fresh data is ranked. Partial, stale or missing data does not mean zero usage.";
     }
     updated.textContent = `Updated ${new Date().toLocaleTimeString()}`;
   }
@@ -123,5 +125,11 @@ export function createLeaderboard({ root, getCurrentUserId }) {
   }
 
   syncControls();
-  return { refresh };
+  function setOffline() {
+    state.requestSeq += 1; // also invalidate an in-flight response from before disconnect
+    renderMessage("Cannot reach the server. Rankings will return after reconnecting.", "warn");
+    updated.textContent = "";
+    rangeLabel.textContent = "";
+  }
+  return { refresh, setOffline };
 }

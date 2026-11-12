@@ -32,5 +32,13 @@ def push_daily_usage(cfg: AgentConfig, usage: DailyUsage) -> str:
         raise SyncError(f"server unreachable: {exc!r}") from exc
 
     if response.status_code != 200:
-        raise SyncError(f"server returned {response.status_code}: {response.text[:200]}")
-    return response.json()["result"]
+        raise SyncError(
+            f"server returned {response.status_code}: {response.text[:200]}"
+        )
+    try:
+        result = response.json()["result"]
+        if result not in ("created", "updated", "ignored_stale"):
+            raise ValueError("unknown result")
+        return result
+    except (ValueError, KeyError, TypeError) as exc:
+        raise SyncError("Server returned an invalid upload response") from exc

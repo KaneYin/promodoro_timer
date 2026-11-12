@@ -25,16 +25,15 @@ Request-shape errors (wrong type, missing field, bad enum) come from FastAPI wit
 | 404 | Referenced user or device does not exist | `user_not_found`, `device_not_found` |
 | 409 | Same session id, different content | `session_conflict` |
 | 422 | Shape or business-rule violation | `invalid_data` and the more specific codes below |
-| 501 | Server logic not implemented yet (development only) | `not_implemented` |
-| 503 | Database unavailable (`/health` only) | |
+| 503 | Database connection/query unavailable | `database_unavailable` |
 
-Business-rule 422 codes (suggested; define them as you implement): `target_out_of_range`, `session_not_completed`, `invalid_time_span`, `time_in_future`, `invalid_date_range`, `usage_too_large`.
+Business-rule 422 codes: `target_out_of_range`, `session_not_completed`, `invalid_time_span`, `time_in_future`, `invalid_date_range`, `usage_too_large`. Unsupported calendar boundaries such as a day ending after year 9999 return `invalid_date_range`.
 
 ---
 
 ## GET `/api/health`
 
-`200` `{"status": "ok", "database": "connected"}`. `503` if `SELECT 1` fails.
+`200` `{"status": "ok", "database": "connected"}`. Checks access to the users table. Connection and query failures return `503 database_unavailable`.
 
 ## GET `/api/users`
 
@@ -133,7 +132,7 @@ Response `200`
 
 Errors: `404 device_not_found`; `422` for `active_seconds` above 25 h, `usage_date` after today, `collected_at_utc` in the future, or `active_seconds < 0`.
 
-`result` is an addition to the design doc's original sketch so the agent can log what happened.
+Concurrent decisions are serialized in a writer transaction, so the reported result matches the actual write.
 
 ---
 
@@ -166,7 +165,8 @@ Response `200`
       "rank": 1,
       "data_status": "available",
       "last_synced_at_utc": "2026-11-11T21:00:02Z",
-      "days_with_data": 3
+      "days_with_data": 3,
+      "days_expected": 3
     },
     {
       "user_id": 2,
@@ -175,7 +175,8 @@ Response `200`
       "rank": null,
       "data_status": "no_data",
       "last_synced_at_utc": null,
-      "days_with_data": 0
+      "days_with_data": 0,
+      "days_expected": 3
     }
   ]
 }
@@ -186,19 +187,22 @@ Response `200`
 | Field | Focus | Screen |
 |---|---|---|
 | `duration_seconds` | Sum, `0` if no sessions | Sum; `null` when `no_data` |
-| `rank` | 1-based; ties share a rank (1, 1, 3) | Same, but `null` for `stale` and `no_data` |
-| `data_status` | Always `available` | `available`, `stale`, `no_data` |
-| `last_synced_at_utc` | `null` | Latest `synced_at_utc` in the window, `null` if none |
+| `rank` | 1-based; ties share a rank (1, 1, 3) | Same, but only `available` entries are ranked |
+| `data_status` | Always `available` | `available`, `partial`, `stale`, `no_data` |
+| `last_synced_at_utc` | `null` | Today's row's receipt for current windows, or latest receipt for historical windows; `null` if absent |
 | `days_with_data` | `null` | Number of days in the window that have a row |
+| `days_expected` | `null` | Number of elapsed dates in the period, including today and excluding future dates |
 
 ### Ordering of `entries`
 1. Ranked entries, sorted by `duration_seconds` in `order`.
-2. `stale` entries.
-3. `no_data` entries.
+2. `partial` entries, sorted by user id.
+3. `stale` entries, sorted by user id.
+4. `no_data` entries, sorted by user id.
 
 ### Screen data status
-- `no_data`: no `screen_usage_daily` row in the window. This is **not zero**.
-- `stale`: the window contains today and the last sync is older than 20 minutes (`SCREEN_STALE_AFTER_SECONDS`).
-- `available`: otherwise.
+- `no_data`: no daily row in the elapsed portion of the window. This is **not zero**.
+- `stale`: rows exist, the window contains today, and today's row is absent or either its collection or receipt time is older than `SCREEN_STALE_AFTER_SECONDS` (20 minutes by default).
+- `partial`: rows exist and freshness passes, but fewer than `days_expected` dates have records.
+- `available`: all elapsed dates have records, and today's data is fresh if the window includes today.
 
-`timezone`, `order`, `generated_at_utc`, `last_synced_at_utc` and `days_with_data` are additions to the design doc's sketch. The frontend relies on them.
+Status precedence is no_data, stale, partial, available. Historical windows are not stale but can be partial. Future-only windows have no_data and zero expected dates. Backfilling yesterday does not refresh today's row. Date coverage does not prove uninterrupted observation within each day; see [design.md](design.md).

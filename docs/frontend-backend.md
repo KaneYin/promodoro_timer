@@ -17,7 +17,7 @@ Dev shortcut: `/?focus=10&break=5` makes the phases 10 s and 5 s. The server sti
 
 ## Timer
 
-State machine (design doc 7.2):
+State machine:
 
 ```
 IDLE --start--> FOCUSING <--pause/resume--> PAUSED
@@ -52,10 +52,10 @@ remaining = targetMs - elapsed
 |---|---|
 | `focusTracker.userId` | Selected user |
 | `focusTracker.timer.v1` | Timer state (phase, session id, started-at, accumulated ms, segment start) |
-| `focusTracker.pendingSessions.v1` | Completed sessions not yet accepted by the server (the outbox) |
-| `focusTracker.rejectedSessions.v1` | Sessions the server permanently refused (kept for inspection, never retried) |
+| `focusTracker.pending.v2.<uuid>` | One completed session not yet accepted by the server |
+| `focusTracker.rejected.v2.<uuid>` | One permanently refused session, including the reason |
 
-A `storage` event listener keeps two tabs in sync. If both tabs finish the same session, they send the same UUID and the server stores it once.
+A `storage` event listener follows changes from other tabs. Web Locks serialize timer controls and completion where supported. If both tabs replay completion, the server deduplicates by UUID. The old `pendingSessions.v1` and `rejectedSessions.v1` arrays migrate on first read; records are written before the old arrays are deleted. Per-record keys prevent an upload removing one session from overwriting another tab's new enqueue.
 
 ## Completing a session (outbox flow)
 
@@ -74,7 +74,7 @@ sequenceDiagram
         S-->>A: {id, saved: true}
         A->>O: remove session
         A->>S: GET stats + leaderboards
-    else network error / timeout / 5xx / 501
+    else network error / timeout / 5xx
         A->>O: keep session, retry later
     else 4xx (409, 422, 404)
         A->>O: move to rejected list
@@ -96,7 +96,7 @@ Retry triggers: right after completion, every 60 s, on the browser `online` even
 | Screen time today and last sync | `GET /api/leaderboards?metric=screen&period=day` (the user's entry) |
 | Leaderboard panel | `GET /api/leaderboards?metric=…&period=…&order=…` |
 
-All of these refresh every 60 s, on tab focus, and after a session sync.
+Statistics and leaderboards refresh every 60 s, on tab visibility recovery, and after a session sync. Health is also checked every 30 s. A failed initial user request is retried after a successful health check until the list loads.
 
 "Today" is computed in `America/Chicago` with `Intl.DateTimeFormat` (`todayInTimezone`), not in the browser's local zone. The server defines day boundaries in that zone, so a user in another timezone sees the same buckets. The constant `LEADERBOARD_TZ` in `util.js` must match `LEADERBOARD_TZ_NAME` in `app/config.py`.
 
@@ -108,6 +108,7 @@ Stats count only what the server has. Unsynced sessions appear in the banner, no
 |---|---|
 | `data_status: "no_data"` | "No Data" badge, rank `–`, never `0m` |
 | `data_status: "stale"` | Duration with a "Stale" badge, rank `–` |
+| `data_status: "partial"` | Known duration with a "Partial" badge and date coverage, rank `–` |
 | Any non-available screen entry | Notice that missing data is not zero |
 | `rank: null` | `–` |
 | `order` | Order toggle only on the Screen tab. Switching metric resets to that metric's default order. |
@@ -119,14 +120,16 @@ All server strings are inserted with `textContent` (`el()` helper), never `inner
 | Situation | Behaviour |
 |---|---|
 | Server unreachable | Pill says Offline. Timer keeps running. Completed sessions wait in the outbox. Leaderboard shows a message instead of old numbers. |
-| 501 `not_implemented` | Leaderboard shows "not implemented on the server yet". Outbox keeps sessions (501 is treated as retryable). |
 | 4xx on session upload | Session moved to the rejected list, banner shows the count, details in the browser console. |
 | Stale responses | Each leaderboard request has a sequence number. Out-of-order replies are dropped. |
-| Opening the page offline | Falls back to the remembered user so the timer still works. |
+| User request fails on an already loaded page | Falls back to the remembered user, then retries after recovery. |
 
 ## Known limits (accepted for the MVP)
 
 - Clearing browser data loses unsynced sessions.
+- There is no service worker; opening or reloading a page while offline is not guaranteed. Already loaded pages keep timing offline.
+- Browser state is origin-specific: localhost and Tailscale HTTPS have separate timer/outbox storage.
+- Browsers without Web Locks have best-effort cross-tab timer synchronization.
 - No real-time timer sync across different browsers or devices.
 - Sleep time counts as focus time (wall clock). Use Reset if that is wrong.
 - Anyone who can open the page can choose either user.

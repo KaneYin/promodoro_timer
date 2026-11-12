@@ -1,5 +1,7 @@
 """FastAPI application: JSON API under /api, static frontend at /."""
 
+import logging
+import sqlite3
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -32,12 +34,13 @@ async def handle_app_error(_: Request, exc: AppError):
     )
 
 
-@app.exception_handler(NotImplementedError)
-async def handle_not_implemented(_: Request, exc: NotImplementedError):
-    # Lets the frontend show "not implemented yet" while core logic is still TODO.
+@app.exception_handler(sqlite3.Error)
+async def handle_database_error(_: Request, exc: sqlite3.Error):
+    # Includes failures establishing a connection in get_db.
+    logging.getLogger(__name__).error("Database failure: %s", exc)
     return JSONResponse(
-        status_code=501,
-        content={"detail": str(exc) or "not implemented", "code": "not_implemented"},
+        status_code=503,
+        content={"detail": "Database unavailable", "code": "database_unavailable"},
     )
 
 

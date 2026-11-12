@@ -20,7 +20,7 @@ log = logging.getLogger("agent")
 
 
 def run_cycle(cfg: AgentConfig, days: int) -> bool:
-    """One sync pass. Returns True if every day was collected and uploaded."""
+    """Return True if all tracked days synced; pre-tracking days are skipped."""
     today = datetime.now(cfg.timezone).date()
     dates = [today - timedelta(days=i) for i in range(days)]
 
@@ -39,6 +39,8 @@ def run_cycle(cfg: AgentConfig, days: int) -> bool:
             usage = collector.DailyUsage(usage_date, seconds, datetime.now(UTC))
             result = sync_client.push_daily_usage(cfg, usage)
             log.info("%s: %ds -> %s", usage_date, seconds, result)
+        except collector.DayNotTracked as exc:
+            log.info("%s: not uploading missing history: %s", usage_date, exc)
         except collector.CollectorError as exc:
             all_ok = False
             log.warning("%s: collection failed, not uploading: %s", usage_date, exc)
@@ -58,19 +60,22 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
+    )
     cfg = load_config()
     days = args.backfill_days or cfg.lookback_days
+    if args.backfill_days is not None and args.backfill_days <= 0:
+        parser.error("--backfill-days must be positive")
 
     while True:
         try:
-            run_cycle(cfg, days)
-        except NotImplementedError as exc:
-            raise SystemExit(f"Collector not implemented yet: {exc}")
+            ok = run_cycle(cfg, days)
         except Exception:  # a bug in one cycle must not kill the daemon
             log.exception("unexpected error in sync cycle")
+            ok = False
         if args.once:
-            break
+            raise SystemExit(0 if ok else 1)
         time.sleep(cfg.sync_interval_seconds)
 
 

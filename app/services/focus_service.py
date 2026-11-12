@@ -1,40 +1,80 @@
-"""Focus session persistence and history (design doc 4.1, 5.3, 6.2).
-
-Services take an open sqlite3 connection and raise app.errors exceptions.
-They do not know about HTTP.
-"""
+"""Completed Focus sessions. BEGIN IMMEDIATE serializes concurrent retry checks."""
 
 import sqlite3
-from datetime import date
+from datetime import date, timedelta
 
+from app import config
+from app.errors import ConflictError, InvalidDataError, NotFoundError
+from app.periods import local_midnight_utc
 from app.schemas import FocusSessionIn, FocusSessionOut, FocusSessionSavedOut
+from app.timeutil import to_utc_iso, utc_now
+
+
+def _require_user(conn: sqlite3.Connection, user_id: int) -> None:
+    if conn.execute("SELECT 1 FROM users WHERE id = ?", (user_id,)).fetchone() is None:
+        raise NotFoundError("User does not exist", code="user_not_found")
 
 
 def save_focus_session(
     conn: sqlite3.Connection, payload: FocusSessionIn
 ) -> FocusSessionSavedOut:
-    """Validate and store one completed Focus Session, idempotently.
+    """Save once per UUID; compare normalized content on every retry.
 
-    TODO(core): implement. See docs/implementation-guide.md, item 2.
-
-    Contract (docs/api.md, POST /api/focus-sessions):
-      1. user_id must exist                         -> NotFoundError("user_not_found")
-      2. Business rules                             -> InvalidDataError(<code>)
-         - config.FOCUS_MIN_TARGET_SECONDS <= target_seconds <= FOCUS_MAX_TARGET_SECONDS
-         - the session is *completed*: focus_seconds == target_seconds
-         - completed_at_utc > started_at_utc, and the wall-clock span is at least
-           focus_seconds (pauses only make the span longer)
-         - completed_at_utc is not in the future (allow CLOCK_SKEW_TOLERANCE_SECONDS)
-      3. Same id already stored:
-         - identical content                        -> success, no second row (HTTP 200)
-         - different content                        -> ConflictError("session_conflict")
-      4. Otherwise insert one row and return FocusSessionSavedOut(id=..., saved=True).
-
-    payload timestamps are already aware UTC with microseconds stripped;
-    store them with app.timeutil.to_utc_iso(). Ids are stored as str(payload.id).
-    Use parameterised SQL only.
+    The writer lock covers lookup and insert together. A competing request waits,
+    then sees the committed row. Identical retries also survive later config changes.
     """
-    raise NotImplementedError("TODO(core): save_focus_session")
+    values = {
+        "id": str(payload.id),
+        "user_id": payload.user_id,
+        "started_at_utc": to_utc_iso(payload.started_at_utc),
+        "completed_at_utc": to_utc_iso(payload.completed_at_utc),
+        "focus_seconds": payload.focus_seconds,
+        "target_seconds": payload.target_seconds,
+    }
+    with conn:
+        conn.execute("BEGIN IMMEDIATE")
+        _require_user(conn, payload.user_id)
+        existing = conn.execute(
+            "SELECT * FROM focus_sessions WHERE id = ?", (values["id"],)
+        ).fetchone()
+        if existing is not None:
+            if dict(existing) != values:
+                raise ConflictError(
+                    "Session id already has different content", code="session_conflict"
+                )
+            return FocusSessionSavedOut(id=payload.id, saved=True)
+        if (
+            not config.FOCUS_MIN_TARGET_SECONDS
+            <= payload.target_seconds
+            <= config.FOCUS_MAX_TARGET_SECONDS
+        ):
+            raise InvalidDataError(
+                "Target duration is outside configured bounds",
+                code="target_out_of_range",
+            )
+        if payload.focus_seconds != payload.target_seconds:
+            raise InvalidDataError(
+                "Only completed sessions can be saved", code="session_not_completed"
+            )
+        span = (payload.completed_at_utc - payload.started_at_utc).total_seconds()
+        if span < payload.focus_seconds:
+            raise InvalidDataError(
+                "Session time span is shorter than its focus duration",
+                code="invalid_time_span",
+            )
+        if payload.completed_at_utc > utc_now() + timedelta(
+            seconds=config.CLOCK_SKEW_TOLERANCE_SECONDS
+        ):
+            raise InvalidDataError(
+                "Completion time is in the future", code="time_in_future"
+            )
+        conn.execute(
+            """INSERT INTO focus_sessions
+               (id, user_id, started_at_utc, completed_at_utc, focus_seconds, target_seconds)
+               VALUES (:id, :user_id, :started_at_utc, :completed_at_utc, :focus_seconds, :target_seconds)""",
+            values,
+        )
+    return FocusSessionSavedOut(id=payload.id, saved=True)
 
 
 def list_focus_sessions(
@@ -43,19 +83,28 @@ def list_focus_sessions(
     start_date: date | None,
     end_date: date | None,
 ) -> list[FocusSessionOut]:
-    """Completed sessions of one user whose *completion* falls in the date range.
-
-    TODO(core): implement. See docs/implementation-guide.md, item 3.
-
-    Contract (docs/api.md, GET /api/focus-sessions):
-      - start_date / end_date are calendar dates in config.LEADERBOARD_TZ and both
-        INCLUSIVE ("2026-11-11".."2026-11-11" = that whole local day).
-      - Either bound may be omitted (open-ended).
-      - end_date < start_date              -> InvalidDataError("invalid_date_range")
-      - unknown user_id                    -> NotFoundError("user_not_found")
-      - Convert the local dates to a UTC half-open window with
-        periods.local_midnight_utc(start) .. local_midnight_utc(end + 1 day),
-        then compare against completed_at_utc.
-      - Order: completed_at_utc DESC.
-    """
-    raise NotImplementedError("TODO(core): list_focus_sessions")
+    """Filter by completion time; both supplied local calendar bounds are inclusive."""
+    _require_user(conn, user_id)
+    if start_date and end_date and end_date < start_date:
+        raise InvalidDataError(
+            "end_date must not precede start_date", code="invalid_date_range"
+        )
+    conditions, values = ["user_id = ?"], [user_id]
+    try:
+        if start_date:
+            conditions.append("completed_at_utc >= ?")
+            values.append(to_utc_iso(local_midnight_utc(start_date)))
+        if end_date:
+            conditions.append("completed_at_utc < ?")
+            values.append(to_utc_iso(local_midnight_utc(end_date + timedelta(days=1))))
+    except (ValueError, OverflowError) as exc:
+        raise InvalidDataError(
+            "Date is outside the supported calendar range", code="invalid_date_range"
+        ) from exc
+    rows = conn.execute(
+        "SELECT * FROM focus_sessions WHERE "
+        + " AND ".join(conditions)
+        + " ORDER BY completed_at_utc DESC, id",
+        values,
+    ).fetchall()
+    return [FocusSessionOut(**dict(row)) for row in rows]

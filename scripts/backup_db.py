@@ -9,8 +9,11 @@ focus.db-shm first), start the server. Details: docs/deployment.md.
 """
 
 import argparse
+import os
 import sqlite3
 import sys
+import tempfile
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 
@@ -23,32 +26,51 @@ PREFIX = "focus-"
 
 def backup(verify: bool) -> Path:
     config.BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    target = config.BACKUP_DIR / f"{PREFIX}{datetime.now():%Y%m%d-%H%M%S}.db"
+    # O_EXCL allocation also protects concurrent invocations, not just subsecond runs.
+    fd, name = tempfile.mkstemp(
+        prefix=f"{PREFIX}{datetime.now():%Y%m%d-%H%M%S-%f}-",
+        suffix=".tmp",
+        dir=config.BACKUP_DIR,
+    )
+    os.close(fd)
+    target = Path(name)
 
-    src = sqlite3.connect(config.DB_PATH)
-    dst = sqlite3.connect(target)
     try:
-        src.backup(dst)
-    finally:
-        dst.close()
-        src.close()
-
-    if verify:
-        check = sqlite3.connect(target)
-        try:
-            result = check.execute("PRAGMA integrity_check").fetchone()[0]
-            tables = check.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-            ).fetchall()
-        finally:
-            check.close()
-        if result != "ok":
-            raise SystemExit(f"Backup verification failed: {result}")
-        print(f"Verified: integrity ok, tables = {[t[0] for t in tables]}")
-    return target
+        with closing(
+            sqlite3.connect(f"{config.DB_PATH.resolve().as_uri()}?mode=ro", uri=True)
+        ) as src:
+            with closing(sqlite3.connect(target)) as dst:
+                src.backup(dst)
+        if verify:
+            with closing(sqlite3.connect(target)) as check:
+                result = check.execute("PRAGMA integrity_check").fetchone()[0]
+                tables = {
+                    r[0]
+                    for r in check.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table'"
+                    )
+                }
+            if result != "ok" or not {
+                "users",
+                "devices",
+                "focus_sessions",
+                "screen_usage_daily",
+            }.issubset(tables):
+                raise RuntimeError(
+                    f"Backup verification failed: {result}, tables={sorted(tables)}"
+                )
+            print(f"Verified: integrity ok, tables = {sorted(tables)}")
+        complete = target.with_suffix(".db")
+        target.rename(complete)
+        return complete
+    except Exception:
+        target.unlink(missing_ok=True)
+        raise
 
 
 def prune() -> None:
+    if config.BACKUP_KEEP < 1:
+        raise SystemExit("FOCUS_BACKUP_KEEP must be at least 1")
     files = sorted(config.BACKUP_DIR.glob(f"{PREFIX}*.db"))
     for old in files[: max(0, len(files) - config.BACKUP_KEEP)]:
         old.unlink()
@@ -57,7 +79,9 @@ def prune() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--verify", action="store_true", help="integrity-check the copy")
+    parser.add_argument(
+        "--verify", action="store_true", help="integrity-check the copy"
+    )
     args = parser.parse_args()
 
     if not config.DB_PATH.exists():

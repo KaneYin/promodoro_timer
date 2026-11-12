@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
 from app.database import Db
 from app.schemas import HealthOut
@@ -8,8 +8,5 @@ router = APIRouter(prefix="/api", tags=["health"])
 
 @router.get("/health", response_model=HealthOut)
 def health(db: Db):
-    try:
-        db.execute("SELECT 1").fetchone()
-    except Exception as exc:  # any DB failure means the service is not healthy
-        raise HTTPException(status_code=503, detail="database unavailable") from exc
+    db.execute("SELECT 1 FROM users LIMIT 1").fetchone()
     return HealthOut(status="ok", database="connected")

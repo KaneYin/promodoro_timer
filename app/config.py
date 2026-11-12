@@ -19,7 +19,7 @@ SCHEMA_PATH = BASE_DIR / "database" / "schema.sql"
 SEED_PATH = BASE_DIR / "database" / "seed.sql"
 STATIC_DIR = BASE_DIR / "app" / "static"
 
-# --- Leaderboard time model (design doc 4.4) --------------------------------
+# --- Leaderboard time model (docs/design.md) -------------------------------
 LEADERBOARD_TZ_NAME = "America/Chicago"
 LEADERBOARD_TZ = ZoneInfo(LEADERBOARD_TZ_NAME)
 

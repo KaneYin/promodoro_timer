@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.focustracker.agent</string>
+  <key>WorkingDirectory</key><string>/ABS/PATH/promodoro_timer</string>
+  <key>ProgramArguments</key><array>
+    <string>/ABS/PATH/promodoro_timer/.venv/bin/python</string><string>-m</string><string>agent.main</string>
+  </array>
+  <key>EnvironmentVariables</key><dict>
+    <key>AGENT_DEVICE_ID</key><string>15ba172f-e397-4155-8285-6757a75875f1</string>
+    <key>AGENT_SERVER_URL</key><string>https://YOUR-SERVER.YOUR-TAILNET.ts.net</string>
+  </dict>
+  <key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/tmp/focustracker.agent.out.log</string>
+  <key>StandardErrorPath</key><string>/tmp/focustracker.agent.err.log</string>
+</dict></plist>

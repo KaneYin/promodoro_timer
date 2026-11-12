@@ -13,7 +13,7 @@ def to_utc_iso(dt: datetime) -> str:
     """Aware datetime -> 'YYYY-MM-DDTHH:MM:SSZ' (UTC, whole seconds)."""
     if dt.tzinfo is None:
         raise ValueError("naive datetime is not allowed")
-    return dt.astimezone(UTC).strftime(UTC_FORMAT)
+    return dt.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def parse_utc_iso(value: str) -> datetime:

@@ -77,7 +77,7 @@ One row per (device, local day). The value is a **cumulative snapshot** and is o
 | `usage_date` | Local calendar date in `America/Chicago`, `YYYY-MM-DD`. |
 | `active_seconds` | Non-AFK foreground-window seconds for that day. `0` means "measured, none". No row means "unknown". |
 | `collected_at_utc` | When the agent computed the value. Decides which of two uploads is newer. |
-| `synced_at_utc` | When the server stored it. Drives the "last sync" display and staleness. |
+| `synced_at_utc` | When the server stored it. Together with collection time, determines today's freshness. Historical reuploads do not refresh today. |
 
 ## Conventions
 
@@ -112,7 +112,9 @@ These are descriptions, not finished SQL. See `docs/implementation-guide.md` for
 
 - Focus total per user in a window: every user must appear, including those with no sessions.
 - Screen total per user in a window: join `users` -> `devices` -> `screen_usage_daily`. Users with no rows must appear as `no_data`.
-- Last sync for a user: `MAX(synced_at_utc)` over the window's rows.
+- Current-window freshness: inspect today's row's collection and receipt times, not a maximum across historical dates.
+- Historical-window last sync: `MAX(synced_at_utc)` over the window's rows.
+- Coverage: count actual right-side daily records, never `COUNT(*)` after an outer join; compare with elapsed calendar dates. See [design.md](design.md).
 
 ## Backup and restore
 

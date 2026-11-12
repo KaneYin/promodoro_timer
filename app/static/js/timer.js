@@ -39,8 +39,9 @@ export class PomodoroTimer {
    * @param {number} [opts.breakMs]
    * @param {(session: object) => void} opts.persistCompletedSession
    *        Must durably store the session synchronously (it is the local outbox write).
+   * @param {boolean} [opts.autoAdvance]           false when boot reconciliation needs a cross-tab lock
    */
-  constructor({ storage, now = () => Date.now(), focusMs = DEFAULT_FOCUS_MS, breakMs = DEFAULT_BREAK_MS, persistCompletedSession }) {
+  constructor({ storage, now = () => Date.now(), focusMs = DEFAULT_FOCUS_MS, breakMs = DEFAULT_BREAK_MS, persistCompletedSession, autoAdvance = true }) {
     this.storage = storage;
     this.now = now;
     this.focusMs = focusMs;
@@ -48,7 +49,7 @@ export class PomodoroTimer {
     this.persistCompletedSession = persistCompletedSession;
     this.listeners = { change: [], "focus-completed": [], "break-completed": [] };
     this.data = this.#load();
-    this.#advance();
+    if (autoAdvance) this.#advance();
   }
 
   // --- Public API ---------------------------------------------------------

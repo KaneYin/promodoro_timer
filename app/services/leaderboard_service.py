@@ -1,22 +1,15 @@
-"""Focus and Screen Time leaderboards (design doc 4.3, 9)."""
+"""Calendar aggregation and competition ranking; incomplete data never wins."""
 
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from app import config
 from app.periods import PeriodWindow, resolve_window, today_local
-from app.schemas import (
-    LeaderboardEntry,
-    LeaderboardOut,
-    Metric,
-    Order,
-    Period,
-)
-from app.timeutil import to_utc_iso, utc_now
+from app.schemas import LeaderboardEntry, LeaderboardOut, Metric, Order, Period
+from app.timeutil import parse_utc_iso, to_utc_iso, utc_now
 
 
 def default_order(metric: Metric) -> Order:
-    """Focus: longest first. Screen Time: least first (design doc 4.3)."""
     return "desc" if metric == "focus" else "asc"
 
 
@@ -27,17 +20,17 @@ def get_leaderboard(
     anchor: date | None,
     order: Order | None,
 ) -> LeaderboardOut:
-    """Assemble the response. Provided; the three helpers below are yours."""
-    anchor = anchor or today_local()
-    order = order or default_order(metric)
-    now = utc_now()
-
+    anchor, order, now = (
+        anchor or today_local(),
+        order or default_order(metric),
+        utc_now(),
+    )
     window = resolve_window(period, anchor, config.LEADERBOARD_TZ)
-    if metric == "focus":
-        entries = focus_entries(conn, window)
-    else:
-        entries = screen_entries(conn, window, now)
-
+    entries = (
+        focus_entries(conn, window)
+        if metric == "focus"
+        else screen_entries(conn, window, now)
+    )
     return LeaderboardOut(
         metric=metric,
         period=period,
@@ -50,55 +43,113 @@ def get_leaderboard(
     )
 
 
-def focus_entries(conn: sqlite3.Connection, window: PeriodWindow) -> list[LeaderboardEntry]:
-    """One entry per user with the summed focus seconds in the window.
-
-    TODO(core): implement. See docs/implementation-guide.md, item 5.
-
-    Contract:
-      - EVERY user appears, including users with no sessions (duration_seconds=0).
-      - A session belongs to the window by completed_at_utc in
-        [window.start_utc, window.end_utc).
-      - data_status is always "available"; rank may be left None (rank_entries sets it);
-        last_synced_at_utc and days_with_data stay None.
-    """
-    raise NotImplementedError("TODO(core): focus_entries")
+def focus_entries(
+    conn: sqlite3.Connection, window: PeriodWindow
+) -> list[LeaderboardEntry]:
+    """Time predicates belong in ON, preserving users without matching sessions."""
+    rows = conn.execute(
+        """SELECT u.id, u.display_name, COALESCE(SUM(f.focus_seconds), 0) AS seconds
+           FROM users u LEFT JOIN focus_sessions f ON f.user_id = u.id
+             AND f.completed_at_utc >= ? AND f.completed_at_utc < ?
+           GROUP BY u.id ORDER BY u.id""",
+        (to_utc_iso(window.start_utc), to_utc_iso(window.end_utc)),
+    ).fetchall()
+    return [
+        LeaderboardEntry(
+            user_id=r["id"],
+            display_name=r["display_name"],
+            duration_seconds=r["seconds"],
+            rank=None,
+            data_status="available",
+        )
+        for r in rows
+    ]
 
 
 def screen_entries(
     conn: sqlite3.Connection, window: PeriodWindow, now: datetime
 ) -> list[LeaderboardEntry]:
-    """One entry per user with summed active seconds and an honest data_status.
+    """Require a fresh today row for current windows and all elapsed dates for ranking."""
+    today = now.astimezone(config.LEADERBOARD_TZ).date()
+    elapsed_end = min(window.end_date_exclusive, today + timedelta(days=1))
+    expected = max(0, (elapsed_end - window.start_date).days)
+    contains_today = window.start_date <= today < window.end_date_exclusive
+    rows = conn.execute(
+        """SELECT u.id, u.display_name, s.usage_date, s.active_seconds,
+                  s.collected_at_utc, s.synced_at_utc
+           FROM users u LEFT JOIN devices d ON d.user_id = u.id
+           LEFT JOIN screen_usage_daily s ON s.device_id = d.id
+             AND s.usage_date >= ? AND s.usage_date < ?
+           ORDER BY u.id, s.usage_date""",
+        (window.start_date.isoformat(), elapsed_end.isoformat()),
+    ).fetchall()
+    groups = {}
+    for row in rows:
+        groups.setdefault(row["id"], {"name": row["display_name"], "days": []})
+        if row["usage_date"] is not None:
+            groups[row["id"]]["days"].append(row)
+    entries = []
+    for user_id, group in groups.items():
+        days = group["days"]
+        current = next((r for r in days if r["usage_date"] == today.isoformat()), None)
+        last_sync = (
+            (current["synced_at_utc"] if current else None)
+            if contains_today
+            else max(
+                (r["synced_at_utc"] for r in days),
+                default=None,
+            )
+        )
+        if not days:
+            status = "no_data"
+        elif contains_today and (
+            current is None
+            or any(
+                (now - parse_utc_iso(current[key])).total_seconds()
+                > config.SCREEN_STALE_AFTER_SECONDS
+                for key in ("collected_at_utc", "synced_at_utc")
+            )
+        ):
+            status = "stale"
+        elif len(days) < expected:
+            status = "partial"
+        else:
+            status = "available"
+        entries.append(
+            LeaderboardEntry(
+                user_id=user_id,
+                display_name=group["name"],
+                duration_seconds=sum(r["active_seconds"] for r in days)
+                if days
+                else None,
+                rank=None,
+                data_status=status,
+                last_synced_at_utc=last_sync,
+                days_with_data=len(days),
+                days_expected=expected,
+            )
+        )
+    return entries
 
-    TODO(core): implement. See docs/implementation-guide.md, item 6.
 
-    Contract:
-      - EVERY user appears. Join users -> devices -> screen_usage_daily on
-        usage_date in [window.start_date, window.end_date_exclusive).
-      - No rows at all in the window  -> data_status "no_data", duration_seconds None.
-        (Missing data is NOT zero. A row with active_seconds = 0 IS real zero.)
-      - Rows exist                    -> duration_seconds = SUM(active_seconds),
-        days_with_data = COUNT(rows), last_synced_at_utc = MAX(synced_at_utc).
-      - If the window contains today (leaderboard timezone) and
-        now - last_synced_at_utc > config.SCREEN_STALE_AFTER_SECONDS
-        -> data_status "stale", otherwise "available". Windows fully in the past
-        are never "stale".
-    """
-    raise NotImplementedError("TODO(core): screen_entries")
-
-
-def rank_entries(entries: list[LeaderboardEntry], order: Order) -> list[LeaderboardEntry]:
-    """Sort entries and assign ranks.
-
-    TODO(core): implement. See docs/implementation-guide.md, item 7.
-
-    Contract:
-      - Ranked group: data_status == "available", sorted by duration_seconds in `order`.
-        Ties share a rank and the next rank skips (1, 1, 3). Ties break by user_id
-        in the returned list so the output is deterministic.
-      - "stale" entries are NOT ranked (rank None; design doc 9.2). Keep their
-        duration for display. They follow the ranked group.
-      - "no_data" entries are NOT ranked (rank None) and come last.
-      - Return a new list; do not depend on the input order.
-    """
-    raise NotImplementedError("TODO(core): rank_entries")
+def rank_entries(
+    entries: list[LeaderboardEntry], order: Order
+) -> list[LeaderboardEntry]:
+    """Return copies; ties use competition ranks (1, 1, 3) and stable user ids."""
+    available = sorted(
+        (e for e in entries if e.data_status == "available"),
+        key=lambda e: ((-1 if order == "desc" else 1) * e.duration_seconds, e.user_id),
+    )
+    result, previous, rank = [], None, 0
+    for index, entry in enumerate(available, start=1):
+        if entry.duration_seconds != previous:
+            rank = index
+        result.append(entry.model_copy(update={"rank": rank}))
+        previous = entry.duration_seconds
+    for status in ("partial", "stale", "no_data"):
+        result.extend(
+            e.model_copy(update={"rank": None})
+            for e in sorted(entries, key=lambda e: e.user_id)
+            if e.data_status == status
+        )
+    return result

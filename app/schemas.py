@@ -26,7 +26,7 @@ UtcDatetime = Annotated[AwareDatetime, AfterValidator(_to_utc_seconds)]
 Metric = Literal["focus", "screen"]
 Period = Literal["day", "week", "month"]
 Order = Literal["asc", "desc"]
-DataStatus = Literal["available", "stale", "no_data"]
+DataStatus = Literal["available", "partial", "stale", "no_data"]
 
 
 # --- Users -------------------------------------------------------------------
@@ -88,13 +88,15 @@ class LeaderboardEntry(BaseModel):
     display_name: str
     # None only when data_status == "no_data" (missing data is NOT zero).
     duration_seconds: int | None
-    # None when the entry is not ranked (no_data, or stale per design 9.2).
+    # Only available entries are ranked.
     rank: int | None
     data_status: DataStatus
     # Screen metric only: when the device's data was last received. None for focus.
     last_synced_at_utc: str | None = None
     # Screen metric only: number of days in the period that have a row. None for focus.
     days_with_data: int | None = None
+    # Elapsed calendar days in this window, including today but excluding future days.
+    days_expected: int | None = None
 
 
 class LeaderboardOut(BaseModel):

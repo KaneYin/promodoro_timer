@@ -2,8 +2,8 @@
 // Contract: docs/api.md.  Outbox behaviour: docs/frontend-backend.md.
 
 const REQUEST_TIMEOUT_MS = 8000;
-const PENDING_KEY = "focusTracker.pendingSessions.v1";
-const REJECTED_KEY = "focusTracker.rejectedSessions.v1";
+const PENDING_PREFIX = "focusTracker.pending.v2.";
+const REJECTED_PREFIX = "focusTracker.rejected.v2.";
 
 /** status === 0 means the request never got an HTTP response (offline, timeout, DNS). */
 export class ApiError extends Error {
@@ -79,27 +79,55 @@ function readList(key) {
   }
 }
 
-export const loadPending = () => readList(PENDING_KEY);
-export const loadRejected = () => readList(REJECTED_KEY);
+function records(prefix) {
+  const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i));
+  return keys.filter((key) => key?.startsWith(prefix)).flatMap((key) => {
+    try {
+      const record = JSON.parse(localStorage.getItem(key));
+      return record && typeof record.id === "string" ? [record] : [];
+    } catch { return []; }
+  }).sort((a, b) => String(a.completed_at_utc ?? "").localeCompare(String(b.completed_at_utc ?? "")) || a.id.localeCompare(b.id));
+}
+
+function migrateLegacyOutbox() {
+  // Copy records before deleting the old arrays. A crash can only replay a UUID.
+  for (const session of readList("focusTracker.rejectedSessions.v1")) {
+    if (session?.id) localStorage.setItem(REJECTED_PREFIX + session.id, JSON.stringify(session));
+  }
+  for (const session of readList("focusTracker.pendingSessions.v1")) {
+    if (session?.id && !localStorage.getItem(REJECTED_PREFIX + session.id)) {
+      localStorage.setItem(PENDING_PREFIX + session.id, JSON.stringify(session));
+    }
+  }
+  localStorage.removeItem("focusTracker.rejectedSessions.v1");
+  localStorage.removeItem("focusTracker.pendingSessions.v1");
+}
+
+export function loadPending() {
+  migrateLegacyOutbox();
+  return records(PENDING_PREFIX).filter((s) => !localStorage.getItem(REJECTED_PREFIX + s.id));
+}
+export function loadRejected() {
+  migrateLegacyOutbox();
+  return records(REJECTED_PREFIX);
+}
 
 /** Store a completed session locally. Synchronous and idempotent by session id. */
 export function enqueueSession(session) {
-  const pending = loadPending();
-  if (!pending.some((s) => s.id === session.id)) {
-    pending.push(session);
-    localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
+  if (!localStorage.getItem(REJECTED_PREFIX + session.id)) {
+    // A separate atomic storage key per UUID prevents another tab's enqueue or
+    // dequeue from overwriting unrelated sessions. Server dedup handles replay.
+    localStorage.setItem(PENDING_PREFIX + session.id, JSON.stringify(session));
   }
 }
 
 function removePending(id) {
-  localStorage.setItem(PENDING_KEY, JSON.stringify(loadPending().filter((s) => s.id !== id)));
+  localStorage.removeItem(PENDING_PREFIX + id);
 }
 
 function moveToRejected(session, reason) {
+  localStorage.setItem(REJECTED_PREFIX + session.id, JSON.stringify({ ...session, rejected_reason: reason }));
   removePending(session.id);
-  const rejected = loadRejected();
-  rejected.push({ ...session, rejected_reason: reason });
-  localStorage.setItem(REJECTED_KEY, JSON.stringify(rejected));
 }
 
 // Retrying can never fix these: the server understood the request and said no.
