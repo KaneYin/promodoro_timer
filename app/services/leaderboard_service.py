@@ -7,6 +7,7 @@ from app import config
 from app.periods import PeriodWindow, resolve_window, today_local
 from app.schemas import LeaderboardEntry, LeaderboardOut, Metric, Order, Period
 from app.timeutil import parse_utc_iso, to_utc_iso, utc_now
+from app.services.focus_rhythm_service import get_focus_rhythms
 
 
 def default_order(metric: Metric) -> Order:
@@ -31,6 +32,9 @@ def get_leaderboard(
         if metric == "focus"
         else screen_entries(conn, window, now)
     )
+    rhythms = get_focus_rhythms(conn, window)
+    for entry in entries:
+        entry.rhythm = rhythms[entry.user_id]
     return LeaderboardOut(
         metric=metric,
         period=period,
