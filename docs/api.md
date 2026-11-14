@@ -79,6 +79,8 @@ Response `200`
 
 Both modes require the completion timestamp after the start, a wall-clock span at least `focus_seconds`, and completion no later than the allowed clock skew. Mode is part of immutable session content and participates in retry comparisons.
 
+New clients may send `active_segments`: 1–10000 objects with timezone-aware `started_at_utc` and `ended_at_utc`, preserving fractional seconds. Intervals must be positive, ordered, non-overlapping, and within session boundaries (the discarded completion fraction is allowed). Their combined whole-second duration must equal `focus_seconds`; invalid intervals return 422 with `invalid_active_segments`. Segment content also participates in retry comparisons (409 on change). Omitted/null intervals preserve legacy compatibility. See [Focus Rhythm](focus-rhythm.md).
+
 Example count-up payload: use `mode: "countup"`, `target_seconds: 7200`, `focus_seconds: 600`, and timestamps spanning at least 600 seconds. It adds one session and 600 seconds to the completion day's Focus total; pauses are excluded from the supplied duration.
 
 The browser retries this call until it gets a 2xx or a permanent 4xx, so every rule above must be safe to hit twice.
@@ -128,13 +130,15 @@ The response includes `period`, `period_start`, `period_end_exclusive`, `timezon
 
 Daily charts group by actual UTC hours converted to the leaderboard timezone: 23/24/25 bins depending on DST. Repeated fall-back hours have distinct CDT/CST labels. Weekly charts contain Monday through Sunday. Monthly charts use Monday-aligned weeks clipped at the first/last day of that month.
 
-**Attribution:** each entire session belongs to its completion bucket, matching Focus rankings. A session completed at 10:05 contributes its recorded duration to the 10:00 hour, even if it began earlier. Both Pomodoro and count-up sessions contribute; pauses/breaks are excluded from recorded duration. Historical records do not contain active segments, so this endpoint does not infer interval-overlap activity from wall-clock spans. Summing a series always gives that user's Focus total for the same leaderboard window.
+**Chart attribution:** each entire session belongs to its completion bucket, matching Focus rankings. A session completed at 10:05 contributes its recorded duration to the 10:00 hour, even if it began earlier. Both Pomodoro and count-up sessions contribute; pauses/breaks are excluded from recorded duration. Summing a chart series always gives that user's Focus total for the same leaderboard window.
+
+**Focus Rhythm:** each series additionally contains `rhythm`, computed from active intervals clipped to the requested period. Includes `key`, `label`, `emoji`, `total_seconds`, `active_days`, `minimum_seconds`, `minimum_days`, `estimated_seconds`, and six `windows` (key/label/emoji/time_range/duration_seconds/share). Rhythm totals may differ from completion-based chart totals. See [definitions and examples](focus-rhythm.md).
 
 Invalid period/date or unsupported calendar bounds return 422. Database failures return 503. Example: `/api/focus-stats?period=month&date=2026-11-13`.
 
 ### GET `/api/focus-stats/dates`
 
-Returns the distinct completion dates recorded in SQL for **both users**, newest first:
+Returns distinct recorded dates for **both users**, newest first. Includes completion dates and dates touched by active intervals (or legacy timing estimates), so the rhythm of a session's preceding day is accessible:
 
 ```json
 {"timezone": "America/Chicago", "dates": ["2026-11-13", "2026-11-11"]}
