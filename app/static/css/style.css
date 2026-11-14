@@ -10,6 +10,8 @@
   --warn: #b7791f;
   --warn-soft: #fdf3dc;
   --error: #b42318;
+  --chart-user-1: #d9482b;
+  --chart-user-2: #2563eb;
   --radius: 14px;
   --shadow: 0 1px 2px rgb(0 0 0 / 6%), 0 4px 16px rgb(0 0 0 / 4%);
 }
@@ -27,6 +29,8 @@
     --warn: #e5b357;
     --warn-soft: #382f1c;
     --error: #ff7b6e;
+    --chart-user-1: #ff8b70;
+    --chart-user-2: #8db4ff;
     --shadow: none;
   }
 }
@@ -74,6 +78,7 @@ select:disabled { opacity: 0.6; cursor: not-allowed; }
 @media (max-width: 720px) { .layout { grid-template-columns: 1fr; padding: 12px; } }
 
 .card {
+  min-width: 0;
   background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
   box-shadow: var(--shadow); padding: 20px;
 }
@@ -94,7 +99,12 @@ select:disabled { opacity: 0.6; cursor: not-allowed; }
 .dial-text { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .phase { text-transform: uppercase; letter-spacing: 0.12em; font-size: 13px; color: var(--accent); font-weight: 600; }
 .clock { font-size: 56px; font-weight: 300; font-variant-numeric: tabular-nums; line-height: 1.1; }
-.controls { display: flex; gap: 10px; margin-top: 16px; }
+.controls { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 16px; }
+.timer-modes { margin-bottom: 14px; }
+.timer-message { margin: 12px 0 0; color: var(--break); font-size: 14px; }
+.notification-controls { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 16px; }
+.notification-controls .hint { margin: 0; font-size: 12px; max-width: 360px; }
+.notification-controls .btn-notifications { padding: 6px 12px; font-size: 13px; font-weight: 500; }
 .hint { color: var(--muted); font-size: 13px; margin: 12px 0 0; min-height: 20px; }
 
 .btn {
@@ -113,6 +123,39 @@ select:disabled { opacity: 0.6; cursor: not-allowed; }
 .stat dt { color: var(--muted); font-size: 13px; }
 .stat dd { margin: 2px 0 0; font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .stat small { color: var(--muted); font-size: 12px; display: block; min-height: 16px; }
+
+/* Both users see the same series, irrespective of the personal user selector. */
+.focus-chart { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); min-width: 0; }
+.chart-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.chart-heading h3 { font-size: 15px; margin: 0; }
+.chart-shared { color: var(--muted); font-size: 12px; }
+.chart-navigation { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 12px 0 8px; }
+.chart-navigation select { font: inherit; font-size: 12px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 7px 10px; min-height: 34px; width: 100%; min-width: 0; cursor: pointer; }
+.chart-navigation select:hover { border-color: var(--muted); }
+.chart-navigation select:focus-visible, .chart-bar:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chart-range { color: var(--muted); font-size: 12px; min-height: 18px; }
+.chart-legend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+.chart-user { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: 12px; min-width: 0; }
+.chart-user-name { overflow: hidden; text-overflow: ellipsis; }
+.chart-user strong { font-variant-numeric: tabular-nums; }
+.chart-swatch { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.chart-plot { width: 100%; min-height: 190px; overflow-x: auto; }
+.focus-chart-svg { display: block; width: 100%; min-width: 320px; height: auto; overflow: visible; }
+.chart-grid { stroke: var(--line); stroke-width: 1; }
+.chart-axis { fill: var(--muted); font-size: 12px; font-family: inherit; }
+.chart-axis-title { font-size: 13px; }
+.chart-bar { cursor: pointer; }
+.chart-bar:hover, .chart-bar:focus { opacity: 0.75; }
+.chart-note, .chart-detail, .chart-message { color: var(--muted); font-size: 12px; margin: 8px 0; }
+.chart-detail { min-height: 18px; color: var(--text); }
+.chart-message { min-height: 160px; display: grid; place-items: center; text-align: center; }
+.chart-data { font-size: 12px; color: var(--muted); }
+.chart-data[hidden] { display: none !important; }
+.chart-data summary { cursor: pointer; width: fit-content; }
+.chart-table-scroll { overflow-x: auto; margin-top: 8px; }
+.chart-data-table { border-collapse: collapse; width: 100%; text-align: left; font-variant-numeric: tabular-nums; }
+.chart-data-table th, .chart-data-table td { padding: 6px; border-bottom: 1px solid var(--line); }
+.chart-data-table td { text-align: right; }
 
 /* Leaderboard */
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }

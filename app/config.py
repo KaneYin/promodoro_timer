@@ -27,6 +27,7 @@ LEADERBOARD_TZ = ZoneInfo(LEADERBOARD_TZ_NAME)
 # Bounds for target_seconds. The default Pomodoro is 1500 (25 min).
 FOCUS_MIN_TARGET_SECONDS = _int_env("FOCUS_MIN_TARGET_SECONDS", 60)
 FOCUS_MAX_TARGET_SECONDS = _int_env("FOCUS_MAX_TARGET_SECONDS", 4 * 3600)
+COUNTUP_MAX_SECONDS = 2 * 3600
 # Allowed clock error between client and server when checking "not in the future".
 CLOCK_SKEW_TOLERANCE_SECONDS = _int_env("CLOCK_SKEW_TOLERANCE_SECONDS", 300)
 

@@ -30,6 +30,7 @@ def save_focus_session(
         "completed_at_utc": to_utc_iso(payload.completed_at_utc),
         "focus_seconds": payload.focus_seconds,
         "target_seconds": payload.target_seconds,
+        "mode": payload.mode,
     }
     with conn:
         conn.execute("BEGIN IMMEDIATE")
@@ -43,19 +44,32 @@ def save_focus_session(
                     "Session id already has different content", code="session_conflict"
                 )
             return FocusSessionSavedOut(id=payload.id, saved=True)
-        if (
-            not config.FOCUS_MIN_TARGET_SECONDS
-            <= payload.target_seconds
-            <= config.FOCUS_MAX_TARGET_SECONDS
-        ):
-            raise InvalidDataError(
-                "Target duration is outside configured bounds",
-                code="target_out_of_range",
-            )
-        if payload.focus_seconds != payload.target_seconds:
-            raise InvalidDataError(
-                "Only completed sessions can be saved", code="session_not_completed"
-            )
+        if payload.mode == "countup":
+            if payload.target_seconds != config.COUNTUP_MAX_SECONDS:
+                raise InvalidDataError(
+                    "Count-up target must be exactly two hours",
+                    code="target_out_of_range",
+                )
+            if payload.focus_seconds > config.COUNTUP_MAX_SECONDS:
+                raise InvalidDataError(
+                    "Count-up duration cannot exceed two hours",
+                    code="focus_out_of_range",
+                )
+        else:
+            if (
+                not config.FOCUS_MIN_TARGET_SECONDS
+                <= payload.target_seconds
+                <= config.FOCUS_MAX_TARGET_SECONDS
+            ):
+                raise InvalidDataError(
+                    "Target duration is outside configured bounds",
+                    code="target_out_of_range",
+                )
+            if payload.focus_seconds != payload.target_seconds:
+                raise InvalidDataError(
+                    "Only completed Pomodoro sessions can be saved",
+                    code="session_not_completed",
+                )
         span = (payload.completed_at_utc - payload.started_at_utc).total_seconds()
         if span < payload.focus_seconds:
             raise InvalidDataError(
@@ -70,8 +84,8 @@ def save_focus_session(
             )
         conn.execute(
             """INSERT INTO focus_sessions
-               (id, user_id, started_at_utc, completed_at_utc, focus_seconds, target_seconds)
-               VALUES (:id, :user_id, :started_at_utc, :completed_at_utc, :focus_seconds, :target_seconds)""",
+               (id, user_id, started_at_utc, completed_at_utc, focus_seconds, target_seconds, mode)
+               VALUES (:id, :user_id, :started_at_utc, :completed_at_utc, :focus_seconds, :target_seconds, :mode)""",
             values,
         )
     return FocusSessionSavedOut(id=payload.id, saved=True)

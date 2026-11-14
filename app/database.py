@@ -35,6 +35,14 @@ def connect(db_path: Path | str | None = None) -> sqlite3.Connection:
 def init_db(conn: sqlite3.Connection) -> None:
     """Create tables and insert the preset users/devices. Idempotent."""
     conn.executescript(config.SCHEMA_PATH.read_text(encoding="utf-8"))
+    # Existing databases predate timer modes. ALTER keeps every stored session
+    # and gives legacy rows the same default as legacy API requests.
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(focus_sessions)")}
+    if "mode" not in columns:
+        conn.execute(
+            "ALTER TABLE focus_sessions ADD COLUMN mode TEXT NOT NULL "
+            "DEFAULT 'pomodoro' CHECK (mode IN ('pomodoro', 'countup'))"
+        )
     conn.executescript(config.SEED_PATH.read_text(encoding="utf-8"))
     conn.commit()
 

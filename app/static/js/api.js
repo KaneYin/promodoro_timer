@@ -67,6 +67,9 @@ export const getFocusSessions = ({ userId, startDate, endDate }) =>
 export const postFocusSession = (session) => request("POST", "/api/focus-sessions", { body: session });
 export const getLeaderboard = ({ metric, period, date, order }) =>
   request("GET", "/api/leaderboards", { query: { metric, period, date, order } });
+export const getFocusStats = ({ period, date }) =>
+  request("GET", "/api/focus-stats", { query: { period, date } });
+export const getFocusDates = () => request("GET", "/api/focus-stats/dates");
 
 // --- Outbox: completed sessions waiting to reach the server ------------------
 

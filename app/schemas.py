@@ -27,6 +27,7 @@ Metric = Literal["focus", "screen"]
 Period = Literal["day", "week", "month"]
 Order = Literal["asc", "desc"]
 DataStatus = Literal["available", "partial", "stale", "no_data"]
+FocusMode = Literal["pomodoro", "countup"]
 
 
 # --- Users -------------------------------------------------------------------
@@ -49,6 +50,7 @@ class FocusSessionIn(BaseModel):
     completed_at_utc: UtcDatetime
     focus_seconds: int = Field(gt=0)
     target_seconds: int = Field(gt=0)
+    mode: FocusMode = "pomodoro"
 
 
 class FocusSessionSavedOut(BaseModel):
@@ -63,6 +65,7 @@ class FocusSessionOut(BaseModel):
     completed_at_utc: str
     focus_seconds: int
     target_seconds: int
+    mode: FocusMode = "pomodoro"
 
 
 # --- Screen time -------------------------------------------------------------
@@ -108,3 +111,35 @@ class LeaderboardOut(BaseModel):
     order: Order
     generated_at_utc: str
     entries: list[LeaderboardEntry]
+
+
+# --- Shared focus chart ------------------------------------------------------
+class FocusDatesOut(BaseModel):
+    timezone: str
+    dates: list[date]
+
+
+class FocusStatsBucket(BaseModel):
+    label: str
+    start_utc: str
+    end_utc: str
+
+
+class FocusStatsSeries(BaseModel):
+    user_id: int
+    display_name: str
+    duration_seconds: list[int]
+    total_seconds: int
+    session_count: int
+
+
+class FocusStatsOut(BaseModel):
+    period: Period
+    period_start: date
+    period_end_exclusive: date
+    timezone: str
+    bucket_unit: Literal["hour", "day", "week"]
+    attribution: Literal["completion"] = "completion"
+    generated_at_utc: str
+    buckets: list[FocusStatsBucket]
+    series: list[FocusStatsSeries]

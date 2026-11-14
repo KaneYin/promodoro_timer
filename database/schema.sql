@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS focus_sessions (
     completed_at_utc TEXT NOT NULL,
     focus_seconds INTEGER NOT NULL,
     target_seconds INTEGER NOT NULL,
+    mode TEXT NOT NULL DEFAULT 'pomodoro' CHECK (mode IN ('pomodoro', 'countup')),
     FOREIGN KEY (user_id) REFERENCES users(id),
     CHECK (focus_seconds > 0),
     CHECK (target_seconds > 0)
