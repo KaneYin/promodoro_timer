@@ -1,9 +1,20 @@
 # Focus Rhythm
 
-Focus comparison displays a rhythm card for each user. Cards follow the same
-Daily / Weekly / Monthly and recorded-period controls. They update after a
-completed session syncs and during normal polling. Current periods describe
-results so far; offline/error states clear outdated labels.
+Leaderboards display a compact personality icon beside each user's name. Hover
+or keyboard-focus the icon to read its established label. Expand **Details** for
+an accessible pie chart, all six window percentages and durations, minimum-data
+progress, and any legacy estimate disclosure. Details remain open during polling
+for the same period and reset when the selected period changes.
+
+The Focus comparison date menu and both sets of Daily / Weekly / Monthly buttons
+share one selection. Choosing a historical date updates the rankings and icons
+to that date; weekly/monthly selections use their full calendar window. Current
+selections follow the Chicago date at midnight; historical selections stay fixed.
+Both leaderboard metrics show a personality based on **focus** time, independently
+of screen-data availability. Offline/error states clear outdated labels.
+
+The corner **Rules** link opens the read-only `/personality-rules.html` page in
+a new tab, with concise tables of time windows, minimum data, and label rules.
 
 All classification uses the existing project timezone, **America/Chicago**,
 shown above the cards. There is no new per-user timezone preference. These are
@@ -53,7 +64,7 @@ duration, so discarded fractions cannot inflate recorded focus totals.
 Startup creates `focus_session_segments` without rewriting existing history.
 Legacy requests/outbox entries without intervals remain accepted. Their saved
 focus seconds are distributed uniformly across their start-to-completion span,
-and cards explicitly disclose the amount of **estimated timing**. This preserves
+and Details explicitly discloses the amount of **estimated timing**. This preserves
 the original focus duration but cannot reconstruct historical pauses.
 
 Intervals are split at window boundaries and local midnight, clipped to the
@@ -71,6 +82,11 @@ as completion dates, so preceding dates remain selectable.
 - `minimum_seconds`, `minimum_days`;
 - `windows`: six objects with `key`, `label`, `emoji`, `time_range`,
   `duration_seconds`, and fractional `share` (0–1).
+
+`GET /api/leaderboards` also returns this object in `entries[].rhythm`, calculated
+for its requested `period` and `date`. Attaching it to the same response prevents
+an icon from being paired with a ranking for a different window. Classification
+and stored data are unchanged by the compact presentation.
 
 The existing bars, personal stats and rankings retain completion attribution.
 Their totals can differ from the interval-based rhythm totals at calendar

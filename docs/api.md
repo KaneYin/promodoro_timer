@@ -134,6 +134,8 @@ Daily charts group by actual UTC hours converted to the leaderboard timezone: 23
 
 **Focus Rhythm:** each series additionally contains `rhythm`, computed from active intervals clipped to the requested period. Includes `key`, `label`, `emoji`, `total_seconds`, `active_days`, `minimum_seconds`, `minimum_days`, `estimated_seconds`, and six `windows` (key/label/emoji/time_range/duration_seconds/share). Rhythm totals may differ from completion-based chart totals. See [definitions and examples](focus-rhythm.md).
 
+The same model is also included as `entries[].rhythm` in `GET /api/leaderboards`, for the leaderboard's requested `period` and `date`, with both metrics. This always describes focus time, even when ranking Screen Time. Ranking duration, freshness and eligibility rules are unchanged.
+
 Invalid period/date or unsupported calendar bounds return 422. Database failures return 503. Example: `/api/focus-stats?period=month&date=2026-11-13`.
 
 ### GET `/api/focus-stats/dates`
