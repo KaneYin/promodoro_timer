@@ -4,7 +4,7 @@ import { createFocusChart, chartScale, periodAnchor, periodOptions, seriesColor 
 import { createDOM, contents, descendants } from "./dom.js";
 import { statsFixture } from "./chart-fixture.js";
 
-function setup({getToday=()=>"2026-11-13"}={}) {
+function setup({getToday=()=>"2026-11-13",onSelectionChange=()=>{}}={}) {
   const {node,Element,document}=createDOM();
   globalThis.Node=Element;
   globalThis.document=document;
@@ -14,7 +14,7 @@ function setup({getToday=()=>"2026-11-13"}={}) {
     requests.push(url);
     return {ok:true,json:async()=>url.pathname.endsWith("/dates") ? {dates:["2026-11-11","2026-11-02"]} : statsFixture(url.searchParams.get("period"))};
   };
-  return {node,requests,chart:createFocusChart({root:node("focus-chart"),getToday}),settle:async()=>{for(let i=0;i<4;i++)await new Promise(r=>setTimeout(r,0));}};
+  return {node,requests,chart:createFocusChart({root:node("focus-chart"),getToday,onSelectionChange}),settle:async()=>{for(let i=0;i<4;i++)await new Promise(r=>setTimeout(r,0));}};
 }
 
 test("grouped bars and legend use stable user colors and both totals",async()=>{
@@ -110,23 +110,26 @@ test("history lookup failure still renders chart and explains unavailable menu",
   assert.match(x.node("chart-updated").textContent,/Recorded periods unavailable/);
 });
 
-test("rhythms follow period selection and clear on offline",async()=>{
-  const x=setup();
-  globalThis.fetch=async url=>({ok:true,json:async()=>{
-    if(url.pathname.endsWith("/dates"))return {dates:[]};
-    const data=statsFixture(url.searchParams.get("period"));
-    data.series[0].rhythm={key:"early_bird",label:"Early Bird",emoji:"🐦",total_seconds:1500,
-      active_days:1,minimum_seconds:1500,minimum_days:1,estimated_seconds:0,
-      windows:[{key:"early_bird",label:"Early Bird",emoji:"🐦",time_range:"6 AM–10 AM",duration_seconds:1500,share:1}]};
-    return data;
-  }});
+test("chart publishes the selected date and period for leaderboard personalities",async()=>{
+  const selections=[];
+  const x=setup({onSelectionChange:s=>selections.push(s)});
   await x.chart.refresh();
-  assert.match(contents(x.node("rhythm-list")),/Early Bird.*100%/);
-  assert.equal(x.node("rhythm-title").textContent,"Today's Focus Rhythm");
+  x.node("chart-date").value="2026-11-11";
+  x.node("chart-date").events.change();await x.settle();
+  assert.deepEqual(selections.at(-1),{period:"day",date:"2026-11-11",followToday:false});
   x.node("chart-month").events.click();await x.settle();
-  assert.equal(x.node("rhythm-title").textContent,"This Month's Focus Rhythm");
-  assert.match(contents(x.node("rhythm-list")),/this month/);
-  x.chart.setOffline();
-  assert.doesNotMatch(contents(x.node("rhythm-list")),/Early Bird/);
-  assert.match(contents(x.node("rhythm-list")),/Cannot reach/);
+  assert.deepEqual(selections.at(-1),{period:"month",date:"2026-11-13",followToday:true});
+  x.chart.selectPeriod("week");await x.settle();
+  assert.equal(x.node("chart-week").getAttribute("aria-pressed"),"true");
+  assert.deepEqual(selections.at(-1),{period:"week",date:"2026-11-13",followToday:true});
+});
+
+test("only current selections publish date rollover",async()=>{
+  let today="2026-11-13";const selections=[];
+  const x=setup({getToday:()=>today,onSelectionChange:s=>selections.push(s)});
+  await x.chart.refresh();today="2026-11-14";await x.chart.refresh();
+  assert.deepEqual(selections.at(-1),{period:"day",date:"2026-11-14",followToday:true});
+  x.node("chart-date").value="2026-11-11";x.node("chart-date").events.change();await x.settle();
+  const count=selections.length;today="2026-11-15";await x.chart.refresh();
+  assert.equal(selections.length,count);
 });

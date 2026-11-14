@@ -1,24 +1,53 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { rhythmCard } from "../../app/static/js/focus-rhythm.js";
-import { createDOM, contents } from "./dom.js";
+import { personalityBadge, personalityDetails, pieData } from "../../app/static/js/focus-rhythm.js";
+import { createDOM, contents, descendants } from "./dom.js";
+import { rhythmFixture } from "./personality-fixture.js";
 
-function card(changes={}) {
+function setup() {
   const {document,Element}=createDOM();globalThis.document=document;globalThis.Node=Element;
-  return rhythmCard({display_name:"Ruiping",rhythm:{key:"night_owl",label:"Night Owl",emoji:"🦉",
-    total_seconds:6000,active_days:3,minimum_seconds:6000,minimum_days:3,estimated_seconds:0,
-    windows:[{key:"night_owl",label:"Night Owl",emoji:"🦉",time_range:"10 PM–2 AM",duration_seconds:4080,share:.68}],...changes}},"week");
 }
 
-test("rhythm card explains its time window and exposes a duration breakdown",()=>{
-  const node=card();
-  assert.match(contents(node),/Ruiping.*🦉 Night Owl.*68%.*10 PM–2 AM.*3 active days.*View time-of-day breakdown.*1h 8m/);
-  assert.doesNotMatch(contents(node),/estimated/);
+test("compact badge exposes the established name to hover and keyboard focus",()=>{
+  setup();const badge=personalityBadge(rhythmFixture(),1);
+  assert.equal(badge.children[0].children[0].textContent,"🦉");
+  assert.equal(badge.children[0].getAttribute("aria-label"),"Focus personality: Night Owl");
+  assert.equal(badge.children[0].getAttribute("tabindex"),"0");
+  assert.equal(badge.children[1].getAttribute("role"),"tooltip");
+  assert.equal(contents(badge.children[1]),"Night Owl");
+  assert.equal(personalityBadge(null,1),null);
 });
 
-test("discovery, empty, flexible and legacy states have clear English explanations",()=>{
-  assert.match(contents(card({key:"discovering",label:"Discovering Your Rhythm",total_seconds:1500,active_days:1})),/Keep going: 25m of 1h 40m, 1 of 3/);
-  assert.match(contents(card({key:"no_focus",label:"No Focus Yet",total_seconds:0,active_days:0})),/Complete a focus session/);
-  assert.match(contents(card({key:"flexible",label:"Flexible Focuser"})),/spanned different parts of the day/);
-  assert.match(contents(card({estimated_seconds:1500})),/Includes 25m of estimated timing from older sessions/);
+test("Details stays collapsed and contains an accessible pie with all six percentages",()=>{
+  setup();const toggles=[];
+  const panel=personalityDetails({display_name:"Ruiping",rhythm:rhythmFixture()},{onToggle:open=>toggles.push(open)});
+  assert.equal(panel.open,false);
+  assert.equal(contents(panel.children[0]),"Details");
+  const pie=descendants(panel).find(n=>n.tagName==="svg");
+  assert.match(pie.getAttribute("aria-label"),/Ruiping.*Night Owl: 65%/);
+  assert.equal(descendants(panel).filter(n=>n.tagName==="li").length,6);
+  assert.match(contents(panel),/Before-Dawn Learner.*0%.*Early Bird.*20%.*Night Owl.*65%/);
+  panel.open=true;panel.events.toggle();assert.deepEqual(toggles,[true]);
+});
+
+test("zero and 100 percent pies are finite and preserve discovery/estimate notes",()=>{
+  setup();const rhythm=rhythmFixture("no_focus");
+  let panel=personalityDetails({display_name:"Yinkun",rhythm});
+  assert.match(contents(panel),/No completed focus time/);
+  assert.equal(descendants(panel).filter(n=>n.tagName==="path").length,0);
+  rhythm.key="early_bird";rhythm.total_seconds=1500;rhythm.windows[1].duration_seconds=1500;
+  panel=personalityDetails({display_name:"Yinkun",rhythm});
+  assert.equal(descendants(panel).filter(n=>n.tagName==="circle").length,1);
+  assert.match(contents(panel),/Early Bird.*100%/);
+  const discovery={...rhythmFixture("discovering","week"),estimated_seconds:600};
+  panel=personalityDetails({display_name:"Yinkun",rhythm:discovery});
+  assert.match(contents(panel),/Discovering Your Rhythm: 10m of 1h 40m/);
+  assert.match(contents(panel),/Includes 10m of estimated timing/);
+});
+
+test("pie geometry uses unrounded durations, including tiny slices",()=>{
+  const data=pieData([{duration_seconds:1,share:0},{duration_seconds:9999,share:1}]);
+  assert.equal(data[0].share,.0001);assert.equal(data[1].share,.9999);
+  assert.ok(data.every(w=>w.path&&!/NaN|Infinity/.test(w.path)));
+  assert.equal(pieData([{duration_seconds:0}])[0].share,0);
 });
