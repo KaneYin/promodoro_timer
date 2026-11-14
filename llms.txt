@@ -1,0 +1,29 @@
+# Focus Tracker
+
+> Focus Tracker is an open-source, self-hosted Pomodoro and count-up focus timer for two people. It records completed focus sessions in SQLite and ranks both users on daily, weekly and monthly Focus leaderboards. An optional agent reads ActivityWatch on each Mac to add a Screen Time leaderboard. Built with Python 3.12+, FastAPI, SQLite and vanilla JavaScript (no build step, no accounts), and shared privately over Tailscale Serve.
+
+Key facts:
+
+- Default timer: 25-minute focus / 5-minute break. Count-up mode saves actual seconds and stops automatically at 2 hours.
+- Two trusted users, no authentication. The server binds to 127.0.0.1. Tailscale Funnel must not be used.
+- Completed sessions go through an offline browser outbox with retry and UUID deduplication.
+- Screen time is ActivityWatch foreground-window time intersected with not-AFK time. It is not Apple Screen Time. Incomplete or stale days are shown but never ranked.
+- Focus personality icons beside both leaderboard names describe the selected day, week or month in America/Chicago. Hover/focus shows names, Details shows pie-chart shares, and Rules opens the static explanation page. Historical date and period controls are synchronized with the comparison chart.
+- Branch `main` is a TODO scaffold for learning; `reference/complete-implementation` is the working app.
+
+## Docs
+
+- [简体中文 README](README.zh-CN.md): Chinese overview, illustrated usage and setup
+- [README](README.md): overview, quick start, Screen Time agent, configuration, FAQ
+- [Design](docs/design.md): goals, invariants, coverage policy and limits
+- [API](docs/api.md): endpoint contracts and errors
+- [Database](docs/database.md): tables, connection settings and privacy
+- [Frontend](docs/frontend-backend.md): timer state, outbox, polling and offline behavior
+- [Focus Rhythm](docs/focus-rhythm.md): personality labels, thresholds and attribution
+- [Deployment](docs/deployment.md): ActivityWatch, Tailscale, launchd and restore
+- [Testing](docs/testing.md): automated coverage and manual checks
+
+## Optional
+
+- [Learning guide](docs/implementation-guide.md): suggested implementation order for building the app from the `main` scaffold
+
