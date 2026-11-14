@@ -3,6 +3,44 @@ import assert from "node:assert/strict";
 import { PomodoroTimer, Mode, COUNTUP_MAX_MS } from "../../app/static/js/timer.js";
 import { MemoryStorage } from "./storage.js";
 
+test("active intervals exclude manual and lock pauses, survive reload, and stop at the deadline",()=>{
+  const {timer,options,advance,sessions}=setup();
+  timer.start(1);advance(10500);timer.pause();advance(60000);
+  timer.resume();advance(20250);timer.pauseByScreenLock();advance(120000);
+  const restored=new PomodoroTimer(options);
+  restored.resumeByScreenUnlock();advance(3600000);restored.tick();
+  assert.deepEqual(sessions[0].active_segments,[
+    {started_at_utc:"2026-11-11T15:00:00.000Z",ended_at_utc:"2026-11-11T15:00:10.500Z"},
+    {started_at_utc:"2026-11-11T15:01:10.500Z",ended_at_utc:"2026-11-11T15:01:30.750Z"},
+    {started_at_utc:"2026-11-11T15:03:30.750Z",ended_at_utc:"2026-11-11T15:04:00.000Z"},
+  ]);
+});
+
+test("count-up stop while paused preserves subsecond segments through outbox failure",()=>{
+  const {timer,options,advance}=setup();
+  const attempts=[];
+  timer.setMode(Mode.COUNTUP);timer.start(1);advance(1234);timer.pause();advance(60000);
+  timer.resume();advance(2345);timer.pause();advance(30000);
+  timer.persistCompletedSession=s=>{attempts.push(structuredClone(s));throw Error("full");};
+  assert.throws(()=>timer.stop(),/full/);
+  advance(60000);
+  const reopened=new PomodoroTimer({...options,persistCompletedSession:s=>attempts.push(s)});
+  assert.equal(reopened.snapshot().state,"IDLE");
+  assert.equal(attempts[0].focus_seconds,3);
+  assert.equal(attempts[0].active_segments.length,2);
+  assert.deepEqual(attempts[0],attempts[1]);
+});
+
+test("upgraded running sessions omit unknown segments instead of inventing pause times",()=>{
+  const {storage,options,advance,sessions}=setup();
+  const timer=new PomodoroTimer(options);timer.start(1);advance(10000);timer.pause();
+  const state=JSON.parse(storage.getItem("focusTracker.timer.v1"));delete state.activeSegments;
+  storage.setItem("focusTracker.timer.v1",JSON.stringify(state));
+  const reopened=new PomodoroTimer(options);advance(30000);reopened.resume();advance(50000);reopened.tick();
+  assert.equal(sessions[0].focus_seconds,60);
+  assert.equal("active_segments" in sessions[0],false);
+});
+
 function setup() {
   let now = Date.parse("2026-11-11T15:00:00Z");
   const storage = new MemoryStorage(), sessions = [];
