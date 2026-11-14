@@ -33,6 +33,7 @@ const idleState = (mode = Mode.POMODORO) => ({
   segmentStartMs: null, // start of the current running segment; null while paused/idle
   completedAtMs: null, // freezes a manual stop's timestamp before any network retry
   pausedByLock: false,
+  activeSegments: [], // closed [startMs, endMs] pairs; null for an upgraded legacy session
 });
 
 export class PomodoroTimer {
@@ -81,6 +82,7 @@ export class PomodoroTimer {
       segmentStartMs: t,
       completedAtMs: null,
       pausedByLock: false,
+      activeSegments: [],
     };
     this.#commit();
   }
@@ -97,9 +99,10 @@ export class PomodoroTimer {
    */
   stop() {
     if (this.#advance() || this.data.mode !== Mode.COUNTUP || ![State.FOCUSING, State.PAUSED].includes(this.data.state)) return;
-    const elapsed = Math.min(this.elapsedMs(), COUNTUP_MAX_MS);
+    const stoppedAtMs = this.now();
+    const elapsed = Math.min(this.elapsedMs(stoppedAtMs), COUNTUP_MAX_MS);
     if (elapsed < 1000) return;
-    this.data = { ...this.data, state: State.COMPLETED, accumulatedMs: elapsed, segmentStartMs: null, completedAtMs: this.now(), pausedByLock: false };
+    this.data = { ...this.data, activeSegments: this.#closedSegments(stoppedAtMs), state: State.COMPLETED, accumulatedMs: elapsed, segmentStartMs: null, completedAtMs: stoppedAtMs, pausedByLock: false };
     this.#commit({ silent: true });
     this.#advance();
   }
@@ -107,7 +110,9 @@ export class PomodoroTimer {
   /** FOCUSING -> PAUSED. */
   pause({ byLock = false } = {}) {
     if (this.#advance() || this.data.state !== State.FOCUSING) return;
-    this.data.accumulatedMs = this.elapsedMs();
+    const pausedAtMs = this.now();
+    this.data.activeSegments = this.#closedSegments(pausedAtMs);
+    this.data.accumulatedMs = this.elapsedMs(pausedAtMs);
     this.data.segmentStartMs = null;
     this.data.state = State.PAUSED;
     this.data.pausedByLock = Boolean(byLock);
@@ -154,9 +159,9 @@ export class PomodoroTimer {
     this.#emit("change");
   }
 
-  elapsedMs() {
+  elapsedMs(atMs = this.now()) {
     const { accumulatedMs, segmentStartMs } = this.data;
-    const running = segmentStartMs === null ? 0 : Math.max(0, this.now() - segmentStartMs);
+    const running = segmentStartMs === null ? 0 : Math.max(0, atMs - segmentStartMs);
     return accumulatedMs + running;
   }
 
@@ -183,6 +188,12 @@ export class PomodoroTimer {
   }
 
   // --- Internals ----------------------------------------------------------
+
+  #closedSegments(endMs) {
+    const d = this.data;
+    if (d.activeSegments === null) return null;
+    return [...d.activeSegments, ...(d.segmentStartMs !== null && endMs > d.segmentStartMs ? [[d.segmentStartMs, endMs]] : [])];
+  }
 
   /**
    * Apply every phase transition that the clock says has already happened
@@ -225,6 +236,10 @@ export class PomodoroTimer {
       started_at_utc: toUtcIso(d.startedAtMs), completed_at_utc: toUtcIso(endedAtMs),
       focus_seconds: seconds, target_seconds: d.mode === Mode.COUNTUP ? COUNTUP_MAX_MS / 1000 : seconds,
     };
+    const segments = this.#closedSegments(endedAtMs);
+    if (segments !== null) session.active_segments = segments.map(([start, end]) => ({
+      started_at_utc: new Date(start).toISOString(), ended_at_utc: new Date(end).toISOString(),
+    }));
     this.persistCompletedSession(session);
     this.data = d.mode === Mode.COUNTUP ? idleState(d.mode) : {
       ...idleState(d.mode), state: State.BREAK, userId: d.userId, sessionId: d.sessionId,
@@ -248,7 +263,8 @@ export class PomodoroTimer {
       const mode = parsed.mode ?? Mode.POMODORO;
       if (!Object.values(Mode).includes(mode)) return idleState();
       if (parsed.state === State.COMPLETED && (mode !== Mode.COUNTUP || !Number.isFinite(parsed.completedAtMs))) return idleState(mode);
-      return { ...idleState(mode), ...parsed, mode, pausedByLock: Boolean(parsed.pausedByLock) };
+      return { ...idleState(mode), ...parsed, mode, pausedByLock: Boolean(parsed.pausedByLock),
+        activeSegments: parsed.activeSegments ?? (parsed.state === State.IDLE ? [] : null) };
     } catch {
       return idleState();
     }

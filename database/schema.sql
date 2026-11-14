@@ -31,6 +31,15 @@ CREATE TABLE IF NOT EXISTS focus_sessions (
 CREATE INDEX IF NOT EXISTS idx_focus_sessions_user_completed
     ON focus_sessions (user_id, completed_at_utc);
 
+-- Only new clients provide active segments. No rows means legacy/estimated.
+CREATE TABLE IF NOT EXISTS focus_session_segments (
+    session_id TEXT NOT NULL REFERENCES focus_sessions(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    started_at_utc TEXT NOT NULL,
+    ended_at_utc TEXT NOT NULL,
+    PRIMARY KEY (session_id, position)
+);
+
 CREATE TABLE IF NOT EXISTS screen_usage_daily (
     device_id TEXT NOT NULL,
     usage_date TEXT NOT NULL,

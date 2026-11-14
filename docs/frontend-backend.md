@@ -106,7 +106,8 @@ Retry triggers: right after completion, every 60 s, on the browser `online` even
 | Screen time today and last sync | `GET /api/leaderboards?metric=screen&period=day` (the user's entry) |
 | Leaderboard panel | `GET /api/leaderboards?metric=…&period=…&order=…` |
 | Shared Focus chart | `GET /api/focus-stats?period=…&date=…` (always both users; no user filter) |
-| Chart history options | `GET /api/focus-stats/dates` (SQL completion dates across both users) |
+| Chart history options | `GET /api/focus-stats/dates` (completion and rhythm dates across both users) |
+| Focus Rhythm cards | `series[].rhythm` from the same Focus chart response; follows period/history controls |
 
 Statistics and leaderboards refresh every 60 s, on tab visibility recovery, and after a session sync. Health is also checked every 30 s. A failed initial user request is retried after a successful health check until the list loads.
 The shared chart follows the same refresh triggers, preserving its own selected date/period. Switching the personal user does not alter the comparison chart. It uses SVG with adjacent bars, tooltip/selection details, stable colors by user id and an expandable table. Offline transitions invalidate in-flight chart requests and clear prior totals.

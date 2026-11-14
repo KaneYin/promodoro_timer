@@ -4,6 +4,8 @@ SQLite, accessed with the standard `sqlite3` module. Schema: `database/schema.sq
 Both are idempotent. The server runs them on every start, and `scripts/init_db.py` runs them on demand.
 Startup also migrates older databases by adding `focus_sessions.mode` with default `pomodoro`; existing rows are preserved. Back up an existing DB before upgrading.
 
+Startup also creates `focus_session_segments (session_id, position, started_at_utc, ended_at_utc)`, keyed by `(session_id, position)` with a cascading foreign key to `focus_sessions.id`. UTC segment timestamps preserve fractional seconds in ISO format; use `datetime.fromisoformat` for these fields. Missing segment rows identify legacy records. Segments and sessions are inserted in one transaction. See [Focus Rhythm](focus-rhythm.md) for validation and estimation rules.
+
 ## ER diagram
 
 ```mermaid
@@ -84,9 +86,12 @@ One row per (device, local day). The value is a **cumulative snapshot** and is o
 
 ## Conventions
 
-**Instants** are stored as UTC text in a fixed format, `YYYY-MM-DDTHH:MM:SSZ` (whole seconds).
+**Session and sync instants** are stored as UTC text in a fixed format, `YYYY-MM-DDTHH:MM:SSZ` (whole seconds).
 Fixed width means string comparison equals time comparison, so `completed_at_utc >= ? AND completed_at_utc < ?` is correct.
 Helpers: `app/timeutil.py`.
+
+**Active-segment instants** are UTC ISO strings with fractional seconds preserved.
+Parse them with `datetime.fromisoformat`; the whole-second helper does not parse this separate format.
 
 **Calendar dates** (`usage_date`) are plain `YYYY-MM-DD` text in the leaderboard timezone.
 

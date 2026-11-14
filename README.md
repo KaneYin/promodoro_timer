@@ -16,6 +16,8 @@ git diff main..reference/complete-implementation -- app/services agent/collector
 
 ## What works
 
+- **Focus Rhythm:** Daily, weekly and monthly labels such as Early Bird and Night Owl for both users, with time-of-day breakdowns, minimum-data progress and disclosed legacy estimates. Follows the Focus comparison period controls. See [Focus Rhythm](docs/focus-rhythm.md) for definitions and attribution.
+
 - Persistent 25-minute focus / 5-minute break timer, pause/resume, reset and delayed-reopen recovery.
 - Count-up mode: Stop & save records actual whole seconds as one session; automatically stops and saves at 2 hours. Modes cannot run simultaneously in the same browser origin.
 - Opt-in silent browser notifications for focus/break completion. Use **Enable silent notifications** and allow the browser prompt. Unsupported browsers retain an in-page completion message; no audio is played.

@@ -43,6 +43,13 @@ class HealthOut(BaseModel):
 
 
 # --- Focus -------------------------------------------------------------------
+class FocusSegment(BaseModel):
+    # Preserve subsecond precision across pauses; session boundaries remain
+    # whole seconds for backwards-compatible retry/history behavior.
+    started_at_utc: AwareDatetime
+    ended_at_utc: AwareDatetime
+
+
 class FocusSessionIn(BaseModel):
     id: UUID
     user_id: int
@@ -51,6 +58,9 @@ class FocusSessionIn(BaseModel):
     focus_seconds: int = Field(gt=0)
     target_seconds: int = Field(gt=0)
     mode: FocusMode = "pomodoro"
+    active_segments: list[FocusSegment] | None = Field(
+        default=None, min_length=1, max_length=10000
+    )
 
 
 class FocusSessionSavedOut(BaseModel):
@@ -114,6 +124,27 @@ class LeaderboardOut(BaseModel):
 
 
 # --- Shared focus chart ------------------------------------------------------
+class FocusRhythmWindow(BaseModel):
+    key: str
+    label: str
+    emoji: str
+    time_range: str
+    duration_seconds: float
+    share: float
+
+
+class FocusRhythm(BaseModel):
+    key: str
+    label: str
+    emoji: str
+    total_seconds: float
+    active_days: int
+    minimum_seconds: int
+    minimum_days: int
+    estimated_seconds: float
+    windows: list[FocusRhythmWindow]
+
+
 class FocusDatesOut(BaseModel):
     timezone: str
     dates: list[date]
@@ -131,6 +162,7 @@ class FocusStatsSeries(BaseModel):
     duration_seconds: list[int]
     total_seconds: int
     session_count: int
+    rhythm: FocusRhythm | None = None
 
 
 class FocusStatsOut(BaseModel):

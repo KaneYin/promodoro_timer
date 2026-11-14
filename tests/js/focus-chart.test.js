@@ -109,3 +109,24 @@ test("history lookup failure still renders chart and explains unavailable menu",
   assert.ok(descendants(x.node("chart-plot")).some(n=>n.tagName==="svg"));
   assert.match(x.node("chart-updated").textContent,/Recorded periods unavailable/);
 });
+
+test("rhythms follow period selection and clear on offline",async()=>{
+  const x=setup();
+  globalThis.fetch=async url=>({ok:true,json:async()=>{
+    if(url.pathname.endsWith("/dates"))return {dates:[]};
+    const data=statsFixture(url.searchParams.get("period"));
+    data.series[0].rhythm={key:"early_bird",label:"Early Bird",emoji:"🐦",total_seconds:1500,
+      active_days:1,minimum_seconds:1500,minimum_days:1,estimated_seconds:0,
+      windows:[{key:"early_bird",label:"Early Bird",emoji:"🐦",time_range:"6 AM–10 AM",duration_seconds:1500,share:1}]};
+    return data;
+  }});
+  await x.chart.refresh();
+  assert.match(contents(x.node("rhythm-list")),/Early Bird.*100%/);
+  assert.equal(x.node("rhythm-title").textContent,"Today's Focus Rhythm");
+  x.node("chart-month").events.click();await x.settle();
+  assert.equal(x.node("rhythm-title").textContent,"This Month's Focus Rhythm");
+  assert.match(contents(x.node("rhythm-list")),/this month/);
+  x.chart.setOffline();
+  assert.doesNotMatch(contents(x.node("rhythm-list")),/Early Bird/);
+  assert.match(contents(x.node("rhythm-list")),/Cannot reach/);
+});

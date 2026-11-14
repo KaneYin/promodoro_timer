@@ -1,7 +1,9 @@
-"""Timestamp helpers. All stored instants are UTC strings 'YYYY-MM-DDTHH:MM:SSZ'.
+"""Whole-second session/sync timestamps: UTC 'YYYY-MM-DDTHH:MM:SSZ'.
 
 The fixed-width format means plain string comparison in SQL
 (`completed_at_utc >= ? AND completed_at_utc < ?`) orders correctly in time.
+Active-segment timestamps preserve fractional seconds separately; parse those
+with datetime.fromisoformat instead of the whole-second helper below.
 """
 
 from datetime import UTC, datetime

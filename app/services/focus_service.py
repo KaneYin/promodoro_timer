@@ -1,13 +1,39 @@
 """Completed Focus sessions. BEGIN IMMEDIATE serializes concurrent retry checks."""
 
 import sqlite3
-from datetime import date, timedelta
+from datetime import UTC, date, timedelta
+from math import floor
 
 from app import config
 from app.errors import ConflictError, InvalidDataError, NotFoundError
 from app.periods import local_midnight_utc
 from app.schemas import FocusSessionIn, FocusSessionOut, FocusSessionSavedOut
 from app.timeutil import to_utc_iso, utc_now
+
+
+def _segments(payload: FocusSessionIn) -> list[tuple[str, str]]:
+    if payload.active_segments is None:
+        return []
+    previous = payload.started_at_utc
+    total = 0.0
+    values = []
+    for segment in payload.active_segments:
+        start = segment.started_at_utc.astimezone(UTC)
+        end = segment.ended_at_utc.astimezone(UTC)
+        if start < previous or end <= start or end >= payload.completed_at_utc + timedelta(seconds=1):
+            raise InvalidDataError(
+                "Active segments must be ordered, non-overlapping and inside the session",
+                code="invalid_active_segments",
+            )
+        total += (end - start).total_seconds()
+        previous = end
+        values.append((start.isoformat(), end.isoformat()))
+    if floor(total + 1e-6) != payload.focus_seconds:
+        raise InvalidDataError(
+            "Active segment duration must match focus_seconds (whole seconds)",
+            code="invalid_active_segments",
+        )
+    return values
 
 
 def _require_user(conn: sqlite3.Connection, user_id: int) -> None:
@@ -32,6 +58,7 @@ def save_focus_session(
         "target_seconds": payload.target_seconds,
         "mode": payload.mode,
     }
+    segments = _segments(payload)
     with conn:
         conn.execute("BEGIN IMMEDIATE")
         _require_user(conn, payload.user_id)
@@ -39,7 +66,11 @@ def save_focus_session(
             "SELECT * FROM focus_sessions WHERE id = ?", (values["id"],)
         ).fetchone()
         if existing is not None:
-            if dict(existing) != values:
+            saved_segments = [tuple(row) for row in conn.execute(
+                "SELECT started_at_utc, ended_at_utc FROM focus_session_segments "
+                "WHERE session_id = ? ORDER BY position", (values["id"],)
+            )]
+            if dict(existing) != values or saved_segments != segments:
                 raise ConflictError(
                     "Session id already has different content", code="session_conflict"
                 )
@@ -87,6 +118,11 @@ def save_focus_session(
                (id, user_id, started_at_utc, completed_at_utc, focus_seconds, target_seconds, mode)
                VALUES (:id, :user_id, :started_at_utc, :completed_at_utc, :focus_seconds, :target_seconds, :mode)""",
             values,
+        )
+        conn.executemany(
+            "INSERT INTO focus_session_segments "
+            "(session_id, position, started_at_utc, ended_at_utc) VALUES (?, ?, ?, ?)",
+            [(values["id"], i, start, end) for i, (start, end) in enumerate(segments)],
         )
     return FocusSessionSavedOut(id=payload.id, saved=True)
 
