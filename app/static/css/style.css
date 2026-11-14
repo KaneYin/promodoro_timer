@@ -201,16 +201,54 @@ select:disabled { opacity: 0.6; cursor: not-allowed; }
 .updated { color: var(--muted); font-size: 12px; margin-top: 10px; text-align: right; }
 
 @media (prefers-reduced-motion: reduce) { .ring-progress { transition: none; } }
-.focus-rhythms { margin: 1rem 0 1.4rem; }
-.focus-rhythms h3 { margin-bottom: .75rem; }
-.rhythm-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: .75rem; }
-.rhythm-card { border: 1px solid var(--line); border-radius: 12px; padding: 1rem; min-width: 0; }
-.rhythm-user { font-size: .85rem; margin-bottom: .5rem; opacity: .8; }
-.rhythm-badge { display: block; font-size: 1.05rem; line-height: 1.5; }
-.rhythm-explanation { margin: .5rem 0; font-size: .9rem; line-height: 1.5; }
-.rhythm-summary { opacity: .75; }
-.rhythm-estimate { font-size: .8rem; line-height: 1.5; }
-.rhythm-rules, .rhythm-distribution { font-size: .8rem; line-height: 1.6; margin-top: .75rem; }
-.rhythm-rules summary, .rhythm-distribution summary { cursor: pointer; }
-.rhythm-distribution ul { list-style: none; padding: 0; }
-.rhythm-distribution li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .25rem .5rem; margin-top: .5rem; }
+
+/* Compact focus personalities; full breakdowns stay behind Details. */
+:root {
+  --personality-0: #8065b4;
+  --personality-1: #bf7a2c;
+  --personality-2: #a18b17;
+  --personality-3: #3a9666;
+  --personality-4: #3d92ab;
+  --personality-5: #5266bd;
+}
+.lb-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.lb-heading h2 { margin: 0; }
+.personality-rules-link { color: var(--muted); text-decoration: none; font-size: 12px; padding: 5px 9px; border: 1px solid var(--line); border-radius: 7px; white-space: nowrap; }
+.personality-rules-link:hover { color: var(--accent); border-color: var(--accent); }
+.personality-rules-link:focus-visible, .personality-icon:focus-visible, .personality-details summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.lb-name { display: flex; align-items: center; gap: 6px; overflow: visible; }
+.lb-display-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-name .tag { margin-left: 0; flex-shrink: 0; }
+.personality-badge { position: relative; display: inline-flex; flex-shrink: 0; }
+.personality-icon { display: inline-flex; align-items: center; justify-content: center; font-size: 19px; line-height: 1.3; cursor: help; border-radius: 4px; }
+.personality-tooltip { position: absolute; bottom: calc(100% + 7px); left: 50%; transform: translateX(-50%); z-index: 10; padding: 5px 8px; border-radius: 6px; background: var(--text); color: var(--card); font-size: 12px; font-weight: 500; white-space: nowrap; opacity: 0; visibility: hidden; pointer-events: none; }
+.personality-badge:hover .personality-tooltip, .personality-badge:focus-within .personality-tooltip { opacity: 1; visibility: visible; }
+.personality-details { grid-column: 2 / -1; min-width: 0; font-size: 13px; }
+.personality-details summary { width: fit-content; cursor: pointer; color: var(--muted); border-radius: 4px; }
+.personality-details summary:hover { color: var(--accent); }
+.personality-breakdown { display: grid; grid-template-columns: minmax(130px, 180px) minmax(0, 1fr); align-items: center; gap: 18px; margin-top: 12px; }
+.personality-pie { display: block; width: 100%; max-width: 200px; height: auto; margin: 0 auto; }
+.personality-pie path, .personality-pie circle { stroke: var(--bg); stroke-width: 1.5; }
+.personality-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.personality-legend li { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.personality-window { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.personality-swatch { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.personality-legend small { display: block; color: var(--muted); font-size: 11px; }
+.personality-share { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.personality-note { color: var(--muted); font-size: 12px; margin: 10px 0 0; }
+@media (max-width: 520px) {
+  .personality-breakdown { grid-template-columns: 1fr; gap: 12px; }
+  .personality-details { grid-column: 1 / -1; }
+  .personality-tooltip { left: auto; right: 0; transform: none; }
+}
+
+/* Read-only personality rules page, sharing the app's theme. */
+.personality-rules-page { max-width: 780px; margin: 0 auto; padding: 24px 16px 40px; }
+.personality-rules-page h1 { font-size: 24px; margin: 14px 0 8px; }
+.personality-rules-page h2 { font-size: 16px; margin: 22px 0 10px; }
+.personality-rules-page p { color: var(--muted); font-size: 14px; }
+.personality-rules-page a { color: var(--accent); }
+.personality-rules-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+.personality-rules-table th, .personality-rules-table td { padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.personality-rules-table th { color: var(--muted); font-weight: 600; }
+.personality-rules-table td:first-child { font-weight: 600; }
