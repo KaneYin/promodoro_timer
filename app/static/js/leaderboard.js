@@ -3,11 +3,13 @@
 
 import { ApiError, getLeaderboard } from "./api.js";
 import { LEADERBOARD_TZ, el, formatDateOnly, formatDuration, timeAgo, todayInTimezone } from "./util.js";
+import { personalityBadge, personalityDetails } from "./focus-rhythm.js";
 
 const DEFAULT_ORDER = { focus: "desc", screen: "asc" };
 
-export function createLeaderboard({ root, getCurrentUserId }) {
-  const state = { metric: "focus", period: "day", order: DEFAULT_ORDER.focus, requestSeq: 0 };
+export function createLeaderboard({ root, getCurrentUserId, onPeriodChange = null, getToday = () => todayInTimezone(LEADERBOARD_TZ) }) {
+  const state = { metric: "focus", period: "day", date: getToday(), followToday: true, order: DEFAULT_ORDER.focus, requestSeq: 0 };
+  const expandedUsers = new Set();
 
   const metricButtons = root.querySelectorAll("[data-metric]");
   const periodButtons = root.querySelectorAll("[data-period]");
@@ -30,21 +32,20 @@ export function createLeaderboard({ root, getCurrentUserId }) {
       state.metric = b.dataset.metric;
       state.order = DEFAULT_ORDER[state.metric];
       syncControls();
-      refresh();
+      refresh({ loading: true });
     });
   }
   for (const b of periodButtons) {
     b.addEventListener("click", () => {
-      state.period = b.dataset.period;
-      syncControls();
-      refresh();
+      if (onPeriodChange) onPeriodChange(b.dataset.period);
+      else setSelection({ period: b.dataset.period, date: getToday(), followToday: true });
     });
   }
   for (const b of orderButtons) {
     b.addEventListener("click", () => {
       state.order = b.dataset.order;
       syncControls();
-      refresh();
+      refresh({ loading: true });
     });
   }
 
@@ -76,7 +77,8 @@ export function createLeaderboard({ root, getCurrentUserId }) {
       el(
         "div",
         { class: "lb-who" },
-        el("span", { class: "lb-name" }, entry.display_name, isMe && el("span", { class: "tag" }, "you")),
+        el("span", { class: "lb-name" }, el("span", { class: "lb-display-name" }, entry.display_name),
+          personalityBadge(entry.rhythm, entry.user_id), isMe && el("span", { class: "tag" }, "you")),
         sub.length > 0 && el("span", { class: "lb-sub" }, sub.join(" · ")),
       ),
       el(
@@ -86,13 +88,16 @@ export function createLeaderboard({ root, getCurrentUserId }) {
         stale && el("span", { class: "badge badge-warn" }, "Stale"),
         partial && el("span", { class: "badge badge-warn" }, "Partial"),
       ),
+      personalityDetails(entry, { open: expandedUsers.has(entry.user_id), onToggle: (open) => {
+        if (open) expandedUsers.add(entry.user_id); else expandedUsers.delete(entry.user_id);
+      } }),
     );
   }
 
   function render(data) {
     const lastDay = formatDateOnly(data.period_end_exclusive, -1);
     const first = formatDateOnly(data.period_start);
-    rangeLabel.textContent = first === lastDay ? `${first} · ${data.timezone}` : `${first} – ${lastDay} · ${data.timezone}`;
+    rangeLabel.textContent = `${first === lastDay ? first : `${first} – ${lastDay}`}, ${data.period_start.slice(0, 4)} · ${data.timezone}`;
 
     const me = getCurrentUserId();
     list.replaceChildren(...data.entries.map((e) => entryRow(e, e.user_id === me, data.metric)));
@@ -106,13 +111,22 @@ export function createLeaderboard({ root, getCurrentUserId }) {
     updated.textContent = `Updated ${new Date().toLocaleTimeString()}`;
   }
 
-  async function refresh() {
+  async function refresh({ loading = false } = {}) {
     const seq = ++state.requestSeq; // ignore responses that arrive after a newer request
+    if (state.followToday && state.date !== getToday()) {
+      state.date = getToday();
+      expandedUsers.clear();
+      loading = true;
+    }
+    if (loading) {
+      renderMessage("Loading leaderboard...");
+      updated.textContent = rangeLabel.textContent = "";
+    }
     try {
       const data = await getLeaderboard({
         metric: state.metric,
         period: state.period,
-        date: todayInTimezone(LEADERBOARD_TZ),
+        date: state.date,
         order: state.order,
       });
       if (seq === state.requestSeq) render(data);
@@ -124,6 +138,15 @@ export function createLeaderboard({ root, getCurrentUserId }) {
     }
   }
 
+  function setSelection({ period, date, followToday }) {
+    if (!["day", "week", "month"].includes(period)) return;
+    if (state.period === period && state.date === date && state.followToday === followToday) return;
+    Object.assign(state, { period, date, followToday });
+    expandedUsers.clear();
+    syncControls();
+    return refresh({ loading: true });
+  }
+
   syncControls();
   function setOffline() {
     state.requestSeq += 1; // also invalidate an in-flight response from before disconnect
@@ -131,5 +154,5 @@ export function createLeaderboard({ root, getCurrentUserId }) {
     updated.textContent = "";
     rangeLabel.textContent = "";
   }
-  return { refresh, setOffline };
+  return { refresh, setOffline, setSelection };
 }

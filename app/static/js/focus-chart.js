@@ -2,7 +2,6 @@
 // Each session is assigned to its completion bucket, matching Focus rankings.
 import { getFocusStats, getFocusDates, ApiError } from "./api.js";
 import { el, formatDateOnly, formatDuration, todayInTimezone } from "./util.js";
-import { rhythmCard } from "./focus-rhythm.js";
 
 const COLORS = ["var(--chart-user-1)", "var(--chart-user-2)"];
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -55,11 +54,10 @@ function svg(tag, attributes = {}, ...children) {
   return node;
 }
 
-export function createFocusChart({ root, getToday = todayInTimezone }) {
+export function createFocusChart({ root, getToday = todayInTimezone, onSelectionChange = () => {} }) {
   const find = (id) => root.querySelector(`#${id}`);
   const ui = Object.fromEntries(["day", "week", "month", "date", "range", "legend", "plot", "detail", "empty", "table", "updated"].map((name) => [name, find(`chart-${name}`)]));
   const state = { period: "day", date: getToday(), followToday: true, sequence: 0, dates: [] };
-  const rhythmList = find("rhythm-list"), rhythmTitle = find("rhythm-title");
 
   function controls() {
     for (const period of ["day", "week", "month"]) ui[period].setAttribute("aria-pressed", String(state.period === period));
@@ -67,17 +65,21 @@ export function createFocusChart({ root, getToday = todayInTimezone }) {
     ui.date.value = state.followToday ? "current" : state.date;
   }
 
-  for (const period of ["day", "week", "month"]) ui[period].addEventListener("click", () => {
+  function selectPeriod(period) {
+    if (!["day", "week", "month"].includes(period)) return;
     state.period = period;
     state.followToday = true;
     state.date = getToday();
     controls();
+    onSelectionChange({ period: state.period, date: state.date, followToday: state.followToday });
     void refresh({ loading: true });
-  });
+  }
+  for (const period of ["day", "week", "month"]) ui[period].addEventListener("click", () => selectPeriod(period));
   ui.date.addEventListener("change", () => {
     if (!ui.date.value) return;
     state.followToday = ui.date.value === "current";
     state.date = state.followToday ? getToday() : ui.date.value;
+    onSelectionChange({ period: state.period, date: state.date, followToday: state.followToday });
     void refresh({ loading: true });
   });
 
@@ -88,13 +90,9 @@ export function createFocusChart({ root, getToday = todayInTimezone }) {
     ui.detail.textContent = "";
     ui.empty.hidden = true;
     ui.updated.textContent = "";
-    rhythmList.replaceChildren(el("p", { class: "chart-message" }, text));
   }
 
   function render(data) {
-    const current = { day: "Today's", week: "This Week's", month: "This Month's" }[data.period];
-    rhythmTitle.textContent = `${state.followToday ? current : { day: "Daily", week: "Weekly", month: "Monthly" }[data.period]} Focus Rhythm`;
-    rhythmList.replaceChildren(...data.series.map((series) => rhythmCard(series, data.period, { current: state.followToday })));
     const first = formatDateOnly(data.period_start), last = formatDateOnly(data.period_end_exclusive, -1);
     ui.range.textContent = `${first === last ? first : `${first} - ${last}`}, ${data.period_start.slice(0, 4)} · ${data.timezone}`;
     ui.legend.replaceChildren(...data.series.map((series) => el("div", { class: "chart-user" },
@@ -152,7 +150,10 @@ export function createFocusChart({ root, getToday = todayInTimezone }) {
 
   async function refresh({ loading = false } = {}) {
     const sequence = ++state.sequence;
-    if (state.followToday) state.date = getToday();
+    if (state.followToday && state.date !== getToday()) {
+      state.date = getToday();
+      onSelectionChange({ period: state.period, date: state.date, followToday: true });
+    }
     controls();
     if (loading) message("Loading focus chart...");
     try {
@@ -179,5 +180,5 @@ export function createFocusChart({ root, getToday = todayInTimezone }) {
     ui.range.textContent = "";
   }
   controls();
-  return { refresh, setOffline };
+  return { refresh, setOffline, selectPeriod };
 }

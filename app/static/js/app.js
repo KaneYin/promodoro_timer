@@ -361,8 +361,12 @@ window.addEventListener("offline", () => setConnection(false));
 const leaderboard = createLeaderboard({
   root: $("leaderboard"),
   getCurrentUserId: () => app.userId,
+  onPeriodChange: (period) => focusChart.selectPeriod(period),
 });
-const focusChart = createFocusChart({ root: $("focus-chart") });
+const focusChart = createFocusChart({
+  root: $("focus-chart"),
+  onSelectionChange: (selection) => leaderboard.setSelection(selection),
+});
 
 (async function init() {
   renderNotificationControls();
