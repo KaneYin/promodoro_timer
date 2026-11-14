@@ -26,4 +26,3 @@ Key facts:
 ## Optional
 
 - [Learning guide](docs/implementation-guide.md): suggested implementation order for building the app from the `main` scaffold
-
