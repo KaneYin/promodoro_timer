@@ -53,6 +53,7 @@ Request
 {
   "id": "6f1d2b2e-8d41-4c8e-9c0a-1f7d2f0b9a11",
   "user_id": 1,
+  "mode": "pomodoro",
   "started_at_utc": "2026-11-11T15:00:00Z",
   "completed_at_utc": "2026-11-11T15:25:00Z",
   "focus_seconds": 1500,
@@ -74,7 +75,11 @@ Response `200`
 | Breaks a business rule | `422` |
 | `focus_seconds <= 0`, bad UUID, naive timestamp | `422` (FastAPI) |
 
-Business rules enforced by the service (see `focus_service.py`): target within configured bounds; `focus_seconds == target_seconds` (only completed sessions count); `completed_at_utc` after `started_at_utc` and the span at least `focus_seconds`; `completed_at_utc` not in the future (small clock skew allowed).
+`mode` is `pomodoro` (default for legacy requests) or `countup`. For Pomodoro, the target must be within configured bounds and `focus_seconds == target_seconds`. For count-up, `target_seconds` must be exactly 7200 and `focus_seconds` must be 1..7200; stopping before the cap is valid. Exceeding the count-up cap returns `422 focus_out_of_range`.
+
+Both modes require the completion timestamp after the start, a wall-clock span at least `focus_seconds`, and completion no later than the allowed clock skew. Mode is part of immutable session content and participates in retry comparisons.
+
+Example count-up payload: use `mode: "countup"`, `target_seconds: 7200`, `focus_seconds: 600`, and timestamps spanning at least 600 seconds. It adds one session and 600 seconds to the completion day's Focus total; pauses are excluded from the supplied duration.
 
 The browser retries this call until it gets a 2xx or a permanent 4xx, so every rule above must be safe to hit twice.
 
@@ -102,6 +107,40 @@ Response `200`: array of
 }
 ```
 Errors: `404 user_not_found`, `422 invalid_date_range` when `end_date < start_date`.
+
+History entries also include `mode` (`pomodoro` or `countup`). Existing sessions are migrated to Pomodoro on startup. Both modes are summed together in Focus leaderboards.
+
+---
+
+## GET `/api/focus-stats`
+
+Shared chart data for **all users**; it does not filter by the selected browser user.
+
+| Param | Required | Notes |
+|---|---|---|
+| `period` | no | `day` (default), `week`, `month` |
+| `date` | no | Local date inside the period; defaults to today in America/Chicago |
+
+The response includes `period`, `period_start`, `period_end_exclusive`, `timezone`, `generated_at_utc`, `bucket_unit` and `attribution: "completion"`, plus:
+
+- `buckets`: ordered objects with `label`, `start_utc`, `end_utc`.
+- `series`: ordered by user id, each with `user_id`, `display_name`, `duration_seconds` (one value per bucket), `total_seconds`, `session_count`. Users with no sessions have zero values, not missing series.
+
+Daily charts group by actual UTC hours converted to the leaderboard timezone: 23/24/25 bins depending on DST. Repeated fall-back hours have distinct CDT/CST labels. Weekly charts contain Monday through Sunday. Monthly charts use Monday-aligned weeks clipped at the first/last day of that month.
+
+**Attribution:** each entire session belongs to its completion bucket, matching Focus rankings. A session completed at 10:05 contributes its recorded duration to the 10:00 hour, even if it began earlier. Both Pomodoro and count-up sessions contribute; pauses/breaks are excluded from recorded duration. Historical records do not contain active segments, so this endpoint does not infer interval-overlap activity from wall-clock spans. Summing a series always gives that user's Focus total for the same leaderboard window.
+
+Invalid period/date or unsupported calendar bounds return 422. Database failures return 503. Example: `/api/focus-stats?period=month&date=2026-11-13`.
+
+### GET `/api/focus-stats/dates`
+
+Returns the distinct completion dates recorded in SQL for **both users**, newest first:
+
+```json
+{"timezone": "America/Chicago", "dates": ["2026-11-13", "2026-11-11"]}
+```
+
+The list is empty when no sessions have been recorded. Dates are converted with the chart's timezone before SQL deduplication, including DST; SQLite's host-local timezone is not used. The frontend groups these dates into available weeks/months. Its default current-period option is always present, even with no records. Database failures return 503.
 
 ---
 

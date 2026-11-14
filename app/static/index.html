@@ -29,7 +29,11 @@
       <div id="sync-banner" class="banner" role="status" hidden></div>
 
       <section class="card timer-card" aria-labelledby="timer-title">
-        <h2 id="timer-title" class="sr-only">Pomodoro timer</h2>
+        <h2 id="timer-title" class="sr-only">Focus timer</h2>
+        <div class="segmented timer-modes" role="group" aria-label="Timer mode">
+          <button id="mode-pomodoro" type="button" aria-pressed="true">Pomodoro</button>
+          <button id="mode-countup" type="button" aria-pressed="false">Count up</button>
+        </div>
         <div class="dial">
           <svg viewBox="0 0 120 120" aria-hidden="true">
             <circle class="ring-track" cx="60" cy="60" r="54" />
@@ -42,9 +46,15 @@
         </div>
         <div class="controls">
           <button id="btn-primary" class="btn btn-primary" type="button" data-action="start">Start</button>
+          <button id="btn-stop" class="btn btn-primary" type="button" hidden>Stop &amp; save</button>
           <button id="btn-reset" class="btn" type="button" disabled>Reset</button>
         </div>
         <p id="timer-hint" class="hint"></p>
+        <p id="timer-message" class="timer-message" role="status" hidden></p>
+        <div class="notification-controls">
+          <button id="btn-notifications" class="btn btn-notifications" type="button">Enable silent notifications</button>
+          <span id="notification-status" class="hint" role="status"></span>
+        </div>
       </section>
 
       <section class="card" aria-labelledby="stats-title">
@@ -59,6 +69,32 @@
             <small id="stat-screen-sync"></small>
           </div>
         </dl>
+        <section id="focus-chart" class="focus-chart" aria-labelledby="chart-title">
+          <div class="chart-heading">
+            <h3 id="chart-title">Focus comparison</h3>
+            <span class="chart-shared">Both users</span>
+          </div>
+          <div class="segmented chart-periods" role="group" aria-label="Focus chart period">
+            <button id="chart-day" type="button" aria-pressed="true">Daily</button>
+            <button id="chart-week" type="button" aria-pressed="false">Weekly</button>
+            <button id="chart-month" type="button" aria-pressed="false">Monthly</button>
+          </div>
+          <div class="chart-navigation">
+            <label class="sr-only" for="chart-date">Current or recorded period</label>
+            <select id="chart-date" aria-label="Current or recorded period"></select>
+          </div>
+          <div id="chart-range" class="chart-range"></div>
+          <div id="chart-legend" class="chart-legend" aria-label="User colors and period totals"></div>
+          <div id="chart-plot" class="chart-plot"><p class="chart-message">Loading focus chart...</p></div>
+          <p id="chart-empty" class="chart-note" hidden>No completed focus sessions in this period.</p>
+          <p id="chart-detail" class="chart-detail" role="status"></p>
+          <p class="chart-note">Grouped by session completion time. Pauses and breaks are excluded.</p>
+          <details class="chart-data" hidden>
+            <summary>View data table</summary>
+            <div id="chart-table" class="chart-table-scroll"></div>
+          </details>
+          <div id="chart-updated" class="updated"></div>
+        </section>
       </section>
 
       <section id="leaderboard" class="card" aria-labelledby="lb-title">

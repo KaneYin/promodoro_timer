@@ -12,7 +12,10 @@ import {
   loadRejected,
 } from "./api.js";
 import { createLeaderboard } from "./leaderboard.js";
-import { PomodoroTimer, State } from "./timer.js";
+import { createFocusChart } from "./focus-chart.js";
+import { PomodoroTimer, State, Mode } from "./timer.js";
+import { SilentNotifications } from "./notifications.js";
+import { ScreenLockDetector } from "./screen-lock.js";
 import { LEADERBOARD_TZ, el, formatClock, formatDuration, timeAgo, todayInTimezone } from "./util.js";
 
 const USER_KEY = "focusTracker.userId";
@@ -30,6 +33,12 @@ const ui = {
   ring: $("ring-progress"),
   primary: $("btn-primary"),
   reset: $("btn-reset"),
+  stop: $("btn-stop"),
+  pomodoroMode: $("mode-pomodoro"),
+  countupMode: $("mode-countup"),
+  timerMessage: $("timer-message"),
+  notifications: $("btn-notifications"),
+  notificationStatus: $("notification-status"),
   timerHint: $("timer-hint"),
   syncBanner: $("sync-banner"),
   statCount: $("stat-count"),
@@ -47,6 +56,11 @@ const secondsParam = (name) => {
 };
 
 const app = { users: [], userId: null, usersLoaded: false, statsSeq: 0, storageError: "" };
+const notifications = new SilentNotifications({ storage: localStorage, onChange: renderNotificationControls });
+const screenLock = new ScreenLockDetector({
+  onLock: () => runTimer(() => timer.pauseByScreenLock()),
+  onUnlock: () => runTimer(() => timer.resumeByScreenUnlock()),
+});
 
 // --- Timer -------------------------------------------------------------------
 
@@ -63,16 +77,18 @@ const PHASE_LABEL = {
   [State.FOCUSING]: "Focus",
   [State.PAUSED]: "Paused",
   [State.BREAK]: "Break",
+  [State.COMPLETED]: "Saving",
 };
 
 function renderTimer(snap) {
-  const text = formatClock(snap.remainingMs);
+  const countup = snap.mode === Mode.COUNTUP;
+  const text = formatClock(countup ? Math.floor(snap.elapsedMs / 1000) * 1000 : snap.remainingMs);
   const active = snap.state !== State.IDLE;
 
-  ui.phase.textContent = PHASE_LABEL[snap.state] ?? "Ready";
+  ui.phase.textContent = countup && snap.state === State.FOCUSING ? "Count up" : PHASE_LABEL[snap.state] ?? "Ready";
   ui.clock.textContent = text;
   ui.ring.style.strokeDasharray = String(RING_LENGTH);
-  ui.ring.style.strokeDashoffset = String(RING_LENGTH * (active ? snap.progress : 0));
+  ui.ring.style.strokeDashoffset = String(RING_LENGTH * (countup ? 1 - snap.progress : active ? snap.progress : 0));
   document.body.dataset.phase = snap.state.toLowerCase();
   document.title = active ? `${text} · ${PHASE_LABEL[snap.state]} — Focus Tracker` : "Focus Tracker";
 
@@ -82,24 +98,41 @@ function renderTimer(snap) {
     [State.FOCUSING]: ["Pause", "pause"],
     [State.PAUSED]: ["Resume", "resume"],
     [State.BREAK]: ["Break running", "none"],
+    [State.COMPLETED]: ["Saving session", "none"],
   }[snap.state];
   ui.primary.textContent = primary[0];
   ui.primary.dataset.action = primary[1];
   ui.primary.disabled = primary[1] === "none";
-  ui.reset.disabled = snap.state === State.IDLE;
-  ui.reset.textContent = snap.state === State.BREAK ? "Skip break" : "Reset";
+  ui.reset.disabled = [State.IDLE, State.COMPLETED].includes(snap.state);
+  ui.reset.textContent = snap.state === State.BREAK ? "Skip break" : countup ? "Discard" : "Reset";
+  ui.stop.hidden = !countup || snap.state === State.IDLE;
+  ui.stop.disabled = snap.elapsedMs < 1000 || snap.state === State.COMPLETED;
+  for (const [button, mode] of [[ui.pomodoroMode, Mode.POMODORO], [ui.countupMode, Mode.COUNTUP]]) {
+    button.disabled = active;
+    button.setAttribute("aria-pressed", String(snap.mode === mode));
+  }
 
   // The session belongs to whoever started it, so lock the selector while it is in progress.
-  const locked = snap.state === State.FOCUSING || snap.state === State.PAUSED;
+  const locked = [State.FOCUSING, State.PAUSED, State.COMPLETED].includes(snap.state);
   ui.userSelect.disabled = locked;
   if (locked && snap.userId && snap.userId !== app.userId) selectUser(snap.userId);
 
   const hints = {
     [State.IDLE]: "Pick a user and press Start. Cancelled sessions are never counted.",
     [State.FOCUSING]: "Pausing stops the clock. Only a completed session counts.",
-    [State.PAUSED]: "Paused. Time does not accumulate until you resume.",
+    [State.PAUSED]: snap.pausedByLock
+      ? "Paused automatically because your screen was locked. Will resume when unlocked."
+      : "Paused. Time does not accumulate until you resume.",
     [State.BREAK]: "Breaks are not counted as focus time.",
+    [State.COMPLETED]: "Saving this session on your device. Its duration is fixed while storage retries.",
   };
+  if (countup) {
+    hints[State.IDLE] = "Count up from zero. Stop & save records one session; the limit is 2 hours.";
+    hints[State.FOCUSING] = "Pause anytime. Stop & save records elapsed focus time. Automatically saves at 2 hours.";
+    hints[State.PAUSED] = snap.pausedByLock
+      ? "Paused automatically because your screen was locked. Will resume when unlocked."
+      : "Paused. Stop & save keeps your focused time; Discard removes this session.";
+  }
   ui.timerHint.textContent = hints[snap.state];
 }
 
@@ -107,10 +140,41 @@ ui.primary.addEventListener("click", () => {
   const action = ui.primary.dataset.action;
   if (action === "start") {
     if (app.userId === null) return alert("Select a user first.");
+    ui.timerMessage.hidden = true;
+    void screenLock.start();
     runTimer(() => timer.start(app.userId));
   } else if (action === "pause") runTimer(() => timer.pause());
   else if (action === "resume") runTimer(() => timer.resume());
 });
+
+ui.stop.addEventListener("click", () => runTimer(() => timer.stop()));
+for (const [button, mode] of [[ui.pomodoroMode, Mode.POMODORO], [ui.countupMode, Mode.COUNTUP]]) {
+  button.addEventListener("click", () => {
+    ui.timerMessage.hidden = true;
+    void screenLock.start();
+    runTimer(() => timer.setMode(mode));
+  });
+}
+
+function renderNotificationControls() {
+  const status = notifications.status();
+  ui.notificationStatus.textContent = status.message;
+  ui.notifications.textContent = status.enabled ? "Disable notifications" : "Enable silent notifications";
+  ui.notifications.disabled = !status.supported || status.permission === "denied";
+}
+
+ui.notifications.addEventListener("click", async () => {
+  ui.notifications.disabled = true;
+  if (notifications.status().enabled) notifications.disable();
+  else await notifications.enable();
+  renderNotificationControls();
+});
+
+function completionMessage(title, body, tag) {
+  ui.timerMessage.textContent = `${title}. ${body}`;
+  ui.timerMessage.hidden = false;
+  void notifications.show(title, body, tag);
+}
 
 ui.reset.addEventListener("click", () => {
   const { state } = timer.snapshot();
@@ -119,10 +183,13 @@ ui.reset.addEventListener("click", () => {
 });
 
 timer.on("change", renderTimer);
-timer.on("focus-completed", () => {
+timer.on("focus-completed", (session) => {
+  const title = session.mode === Mode.COUNTUP ? (session.focus_seconds === 7200 ? "2-hour limit reached" : "Count-up session complete") : "Focus complete";
+  completionMessage(title, `${formatDuration(session.focus_seconds)} recorded and queued for sync.`, `focus-${session.id}`);
   renderSyncBanner();
   syncAndRefresh();
 });
+timer.on("break-completed", ({ id }) => completionMessage("Break complete", "Ready for another focus session.", `break-${id}`));
 
 // Web Locks serialize state-changing controls/completions between tabs. The
 // per-session outbox remains safe even in browsers without Web Locks.
@@ -141,8 +208,15 @@ async function runTimer(action = () => timer.tick()) {
 setInterval(() => runTimer(), 250);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
+    if (screenLock.getScreenState() === "unlocked") {
+      runTimer(() => timer.resumeByScreenUnlock());
+    }
     runTimer();
     refreshAll();
+  } else {
+    if (screenLock.getScreenState() === "locked") {
+      runTimer(() => timer.pauseByScreenLock());
+    }
   }
 });
 // Another tab changed the timer (start/pause/reset): follow it.
@@ -256,6 +330,7 @@ function setConnection(online) {
     ui.statCount.textContent = ui.statToday.textContent = ui.statWeek.textContent = ui.statScreen.textContent = dash;
     ui.statScreenSync.textContent = "Server unavailable";
     leaderboard.setOffline();
+    focusChart.setOffline();
   }
 }
 
@@ -268,6 +343,7 @@ async function syncAndRefresh() {
   renderSyncBanner();
   refreshStats();
   leaderboard.refresh();
+  focusChart.refresh();
 }
 
 async function refreshAll() {
@@ -286,8 +362,13 @@ const leaderboard = createLeaderboard({
   root: $("leaderboard"),
   getCurrentUserId: () => app.userId,
 });
+const focusChart = createFocusChart({ root: $("focus-chart") });
 
 (async function init() {
+  renderNotificationControls();
+  if ((await screenLock.checkPermission()) === "granted") {
+    void screenLock.start();
+  }
   await runTimer();
   renderTimer(timer.snapshot());
   renderSyncBanner();

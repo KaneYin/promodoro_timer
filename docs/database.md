@@ -2,6 +2,7 @@
 
 SQLite, accessed with the standard `sqlite3` module. Schema: `database/schema.sql`. Preset rows: `database/seed.sql`.
 Both are idempotent. The server runs them on every start, and `scripts/init_db.py` runs them on demand.
+Startup also migrates older databases by adding `focus_sessions.mode` with default `pomodoro`; existing rows are preserved. Back up an existing DB before upgrading.
 
 ## ER diagram
 
@@ -28,6 +29,7 @@ erDiagram
         TEXT completed_at_utc
         INTEGER focus_seconds
         INTEGER target_seconds
+        TEXT mode "pomodoro or countup"
     }
     screen_usage_daily {
         TEXT device_id PK,FK
@@ -57,15 +59,16 @@ Two rows are seeded. There are no credentials. Rename a user with
 | `timezone` | Informational for now. Day boundaries come from the leaderboard timezone. |
 
 ### focus_sessions
-One row per **completed** Pomodoro. Cancelled sessions never reach the server.
+One row per completed Pomodoro or stopped/capped count-up session. Discarded sessions never reach the server.
 
 | Column | Notes |
 |---|---|
 | `id` | UUID made by the browser. This is the idempotency key. |
 | `started_at_utc` | When the user first pressed Start. |
-| `completed_at_utc` | When the target time was reached. Decides which day/week/month the session counts in. |
+| `completed_at_utc` | When the Pomodoro completed, count-up was stopped, or its 2-hour cap was reached. Decides the local day/week/month. |
 | `focus_seconds` | Time actually spent focusing, pauses excluded. |
-| `target_seconds` | The planned length (1500 by default). |
+| `target_seconds` | Planned Pomodoro length (1500 by default), or 7200 for count-up. |
+| `mode` | `pomodoro` by default, or `countup`. Count-up duration may be less than its target. |
 
 Index `idx_focus_sessions_user_completed (user_id, completed_at_utc)` supports both the history query and the leaderboard sum.
 

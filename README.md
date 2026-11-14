@@ -17,8 +17,11 @@ git diff main..reference/complete-implementation -- app/services agent/collector
 ## What works
 
 - Persistent 25-minute focus / 5-minute break timer, pause/resume, reset and delayed-reopen recovery.
+- Count-up mode: Stop & save records actual whole seconds as one session; automatically stops and saves at 2 hours. Modes cannot run simultaneously in the same browser origin.
+- Opt-in silent browser notifications for focus/break completion. Use **Enable silent notifications** and allow the browser prompt. Unsupported browsers retain an in-page completion message; no audio is played.
 - Completed-session outbox, automatic retry, UUID deduplication and per-record storage safe from cross-tab array overwrites.
 - Local-day history and day/week/month leaderboards, including DST boundaries and competition ranks.
+- Shared two-user Focus bar chart below personal stats: daily completion hours, weekly days, and monthly Monday-aligned weeks. Automatically opens the current period using the browser clock; the history menu lists only periods with recorded sessions. Fixed user colors and an accessible data table.
 - ActivityWatch foreground-window time intersected with not-AFK time; cumulative daily snapshots and historical backfill.
 - Screen data coverage and freshness: incomplete, stale or missing data is displayed but never ranked.
 - SQLite initialization, verified online backups and retention.
@@ -41,6 +44,12 @@ uv run --no-sync uvicorn app.main:app --host 127.0.0.1 --port 8000
 - Health: http://127.0.0.1:8000/api/health
 
 Complete a timer session, then confirm the outbox clears and Focus totals update. Cancelled sessions and breaks are excluded. For a faster local check, start the server with `FOCUS_MIN_TARGET_SECONDS=1` and open `/?focus=10&break=5`; restore the normal minimum afterwards.
+
+For open-ended work, select **Count up**, start, then **Stop & save** (also available while paused). Sessions shorter than one second are not saved. Focus totals and session counts update through the same offline outbox. Dates use the completion day in America/Chicago. Startup automatically migrates existing database rows to `mode="pomodoro"` without deleting history.
+
+Notifications require HTTPS or localhost, browser permission and support for the silent option. They fire when the loaded page processes a completion; closed or suspended pages cannot guarantee an on-time alert. A notification-only service worker supports delivery where available, without adding offline caching or a background timer.
+
+After updating frontend files, restart the server and refresh the page. HTML is not cached, and CSS plus the complete JavaScript module graph use a content-versioned URL prefix, preventing a new page from loading older cached modules.
 
 ## Screen Time agent
 
@@ -74,6 +83,7 @@ uv run --no-sync python scripts/backup_db.py --verify
 | `app/routers/`, `app/schemas.py` | HTTP routes and API models |
 | `app/services/`, `app/periods.py` | Persistence, validation, aggregation and calendar windows |
 | `app/static/` | Browser timer, outbox, statistics and leaderboards |
+| `app/static/js/focus-chart.js` | Shared two-user Focus chart, date/period controls and data table |
 | `agent/` | Local ActivityWatch collection and HTTP sync |
 | `database/`, `scripts/` | Schema, seed, initialization and backup |
 | `tests/` | Python and JavaScript regression tests |

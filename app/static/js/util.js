@@ -52,13 +52,15 @@ export function timeAgo(iso, nowMs = Date.now()) {
 
 /** Today's calendar date as "YYYY-MM-DD" in the given IANA timezone. */
 export function todayInTimezone(timeZone = LEADERBOARD_TZ, nowMs = Date.now()) {
-  // The en-CA locale formats dates as YYYY-MM-DD.
-  return new Intl.DateTimeFormat("en-CA", {
+  // Assemble parts explicitly: locale separators/order can vary by browser.
+  const parts = new Intl.DateTimeFormat("en-US", {
     timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(new Date(nowMs));
+  }).formatToParts(new Date(nowMs));
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 /** "2026-11-09" -> "Nov 9" (pure calendar math, immune to the browser's timezone). */
