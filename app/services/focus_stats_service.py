@@ -1,13 +1,12 @@
 """Shared chart data, using exactly the completion-date policy of Focus rankings.
 
-Historical records contain duration and completion time, not active segments.
-Assign the entire recorded duration to its completion bucket rather than inventing
-an hourly activity distribution that would include unknown pause intervals.
+Chart bars retain completion attribution. Rhythm cards separately split active
+intervals (or disclosed legacy estimates), so calendar-boundary totals may differ.
 """
 
 import sqlite3
 from bisect import bisect_right
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from app import config
 from app.periods import PeriodWindow, local_midnight_utc, resolve_window, today_local
@@ -19,6 +18,7 @@ from app.schemas import (
     Period,
 )
 from app.timeutil import parse_utc_iso, to_utc_iso, utc_now_iso
+from app.services.focus_rhythm_service import get_focus_rhythms
 
 WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
@@ -38,9 +38,21 @@ def get_focus_dates(conn: sqlite3.Connection) -> FocusDatesOut:
         """SELECT DISTINCT focus_local_date(completed_at_utc) AS day
            FROM focus_sessions ORDER BY day DESC"""
     ).fetchall()
-    return FocusDatesOut(
-        timezone=config.LEADERBOARD_TZ_NAME, dates=[row["day"] for row in rows]
+    dates = {date.fromisoformat(row["day"]) for row in rows}
+    # Rhythm can include the day before completion. Keep these days reachable
+    # from the shared history menu, including segment-free legacy estimates.
+    intervals = conn.execute(
+        """SELECT COALESCE(s.started_at_utc, f.started_at_utc) AS start,
+                  COALESCE(s.ended_at_utc, f.completed_at_utc) AS end
+           FROM focus_sessions f LEFT JOIN focus_session_segments s ON s.session_id = f.id"""
     )
+    for interval in intervals:
+        start = datetime.fromisoformat(interval["start"]).astimezone(config.LEADERBOARD_TZ).date()
+        last = (datetime.fromisoformat(interval["end"]) - timedelta(microseconds=1)).astimezone(config.LEADERBOARD_TZ).date()
+        while start <= last:
+            dates.add(start)
+            start += timedelta(days=1)
+    return FocusDatesOut(timezone=config.LEADERBOARD_TZ_NAME, dates=sorted(dates, reverse=True))
 
 
 def chart_buckets(window: PeriodWindow) -> list[FocusStatsBucket]:
@@ -122,6 +134,9 @@ def get_focus_stats(
             item.duration_seconds[index] += row["focus_seconds"]
             item.total_seconds += row["focus_seconds"]
             item.session_count += 1
+    rhythms = get_focus_rhythms(conn, window)
+    for user_id, item in series.items():
+        item.rhythm = rhythms[user_id]
     return FocusStatsOut(
         period=period,
         period_start=window.start_date,
