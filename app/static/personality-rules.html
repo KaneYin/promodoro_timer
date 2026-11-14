@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Personality Rules · Focus Tracker</title>
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body>
+    <main class="personality-rules-page">
+      <a href="/">← Focus Tracker</a>
+      <h1>Personality Rules</h1>
+      <p>Your focus personality describes when you focus in the selected day, week or month. All times use <strong>America/Chicago</strong>.</p>
+      <section class="card" aria-labelledby="windows-title">
+        <h2 id="windows-title">Time windows</h2>
+        <table class="personality-rules-table">
+          <thead><tr><th scope="col">Personality</th><th scope="col">Local time</th></tr></thead>
+          <tbody>
+            <tr><td>🐦 Early Bird</td><td>06:00–10:00</td></tr>
+            <tr><td>☀️ Midday Focuser</td><td>10:00–14:00</td></tr>
+            <tr><td>🌤️ Afternoon Learner</td><td>14:00–18:00</td></tr>
+            <tr><td>🌆 Evening Learner</td><td>18:00–22:00</td></tr>
+            <tr><td>🦉 Night Owl</td><td>22:00–02:00 (next day)</td></tr>
+            <tr><td>🌌 Before-Dawn Learner</td><td>02:00–06:00</td></tr>
+          </tbody>
+        </table>
+        <h2>Enough data to assign a personality</h2>
+        <table class="personality-rules-table">
+          <thead><tr><th scope="col">Period</th><th scope="col">Focus time</th><th scope="col">Active days</th></tr></thead>
+          <tbody>
+            <tr><td>Daily</td><td>At least 25 minutes</td><td>1</td></tr>
+            <tr><td>Weekly</td><td>At least 100 minutes</td><td>At least 3</td></tr>
+            <tr><td>Monthly</td><td>At least 300 minutes</td><td>At least 7</td></tr>
+          </tbody>
+        </table>
+        <h2>How we choose the label</h2>
+        <table class="personality-rules-table">
+          <thead><tr><th scope="col">Result</th><th scope="col">Rule</th></tr></thead>
+          <tbody>
+            <tr><td>Time-window personality</td><td>After both data minimums are met: the leading window has ≥50% of focus time and leads the runner-up by ≥15 percentage points.</td></tr>
+            <tr><td>🎨 Flexible Focuser</td><td>Enough data, but no window meets both conditions.</td></tr>
+            <tr><td>🔎 Discovering Your Rhythm</td><td>Some focus time, but either data minimum is not met.</td></tr>
+            <tr><td>🌱 No Focus Yet</td><td>No completed focus time in this period.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <p>Daily periods run midnight to midnight; weeks run Monday to Sunday; months follow the calendar. Current periods show results so far.</p>
+      <p>Shares use focus duration, not session counts or daily-label votes. Completed sessions are split across time windows and midnight; pauses and breaks are excluded for new records. Older records use estimated timing, disclosed in Details.</p>
+      <p>Classification uses unrounded shares; the pie chart shows rounded percentages. Chart and ranking totals use session completion dates, so they may differ from the personality breakdown at calendar boundaries.</p>
+    </main>
+  </body>
+</html>
