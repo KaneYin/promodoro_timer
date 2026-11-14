@@ -201,3 +201,16 @@ select:disabled { opacity: 0.6; cursor: not-allowed; }
 .updated { color: var(--muted); font-size: 12px; margin-top: 10px; text-align: right; }
 
 @media (prefers-reduced-motion: reduce) { .ring-progress { transition: none; } }
+.focus-rhythms { margin: 1rem 0 1.4rem; }
+.focus-rhythms h3 { margin-bottom: .75rem; }
+.rhythm-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: .75rem; }
+.rhythm-card { border: 1px solid var(--line); border-radius: 12px; padding: 1rem; min-width: 0; }
+.rhythm-user { font-size: .85rem; margin-bottom: .5rem; opacity: .8; }
+.rhythm-badge { display: block; font-size: 1.05rem; line-height: 1.5; }
+.rhythm-explanation { margin: .5rem 0; font-size: .9rem; line-height: 1.5; }
+.rhythm-summary { opacity: .75; }
+.rhythm-estimate { font-size: .8rem; line-height: 1.5; }
+.rhythm-rules, .rhythm-distribution { font-size: .8rem; line-height: 1.6; margin-top: .75rem; }
+.rhythm-rules summary, .rhythm-distribution summary { cursor: pointer; }
+.rhythm-distribution ul { list-style: none; padding: 0; }
+.rhythm-distribution li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .25rem .5rem; margin-top: .5rem; }
