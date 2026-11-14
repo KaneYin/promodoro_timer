@@ -84,6 +84,16 @@
             <select id="chart-date" aria-label="Current or recorded period"></select>
           </div>
           <div id="chart-range" class="chart-range"></div>
+          <section class="focus-rhythms" aria-labelledby="rhythm-title">
+            <h3 id="rhythm-title">Today's Focus Rhythm</h3>
+            <div id="rhythm-list" class="rhythm-list" aria-live="polite"><p class="chart-message">Loading focus rhythm...</p></div>
+            <details class="rhythm-rules">
+              <summary>How is my rhythm calculated?</summary>
+              <p>Based on completed focus time in America/Chicago. A time window needs at least 50% of your focus time and a lead of at least 15 percentage points; otherwise, your rhythm is Flexible Focuser.</p>
+              <p>Daily: 25 minutes. Weekly: 100 minutes across 3 days. Monthly: 300 minutes across 7 days. Until then, we are Discovering Your Rhythm.</p>
+              <p>Focus is split across time windows and midnight, with pauses excluded for new sessions. Older sessions use estimated timing. Rhythm totals may differ from the chart and rankings, which assign whole sessions to their completion date. Current periods show results so far.</p>
+            </details>
+          </section>
           <div id="chart-legend" class="chart-legend" aria-label="User colors and period totals"></div>
           <div id="chart-plot" class="chart-plot"><p class="chart-message">Loading focus chart...</p></div>
           <p id="chart-empty" class="chart-note" hidden>No completed focus sessions in this period.</p>
