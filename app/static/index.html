@@ -7,13 +7,16 @@
     <title>Focus Tracker</title>
     <link
       rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🍅%3C/text%3E%3C/svg%3E"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23467a8c' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9' opacity='.35'/%3E%3Cpath d='M12 3a9 9 0 0 1 9 9'/%3E%3C/svg%3E"
     />
     <link rel="stylesheet" href="/css/style.css" />
   </head>
   <body data-phase="idle">
     <header class="topbar">
-      <div class="brand"><span aria-hidden="true">🍅</span> Focus Tracker</div>
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" opacity="0.35" /><path d="M12 3a9 9 0 0 1 9 9" /></svg>
+        Focus Tracker
+      </div>
       <div class="topbar-right">
         <label class="user-picker">
           <span class="sr-only">Current user</span>
@@ -28,7 +31,7 @@
     <main class="layout">
       <div id="sync-banner" class="banner" role="status" hidden></div>
 
-      <section class="card timer-card" aria-labelledby="timer-title">
+      <section class="timer-card" aria-labelledby="timer-title">
         <h2 id="timer-title" class="sr-only">Focus timer</h2>
         <div class="segmented timer-modes" role="group" aria-label="Timer mode">
           <button id="mode-pomodoro" type="button" aria-pressed="true">Pomodoro</button>
@@ -57,7 +60,7 @@
         </div>
       </section>
 
-      <section class="card" aria-labelledby="stats-title">
+      <section aria-labelledby="stats-title">
         <h2 id="stats-title">Your stats</h2>
         <dl class="stats">
           <div class="stat"><dt>Sessions today</dt><dd id="stat-count">—</dd></div>
@@ -97,7 +100,7 @@
         </section>
       </section>
 
-      <section id="leaderboard" class="card" aria-labelledby="lb-title">
+      <section id="leaderboard" aria-labelledby="lb-title">
         <div class="lb-heading">
           <h2 id="lb-title">Leaderboards</h2>
           <a class="personality-rules-link" href="/personality-rules.html" target="_blank" rel="noopener" aria-label="Personality rules (opens in a new tab)">Rules ↗</a>

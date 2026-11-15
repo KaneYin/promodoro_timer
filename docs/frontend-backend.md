@@ -151,3 +151,5 @@ All server strings are inserted with `textContent` (`el()` helper), never `inner
 - No real-time timer sync across different browsers or devices.
 - Sleep time counts as focus time (wall clock). Use Reset if that is wrong.
 - Anyone who can open the page can choose either user.
+
+The calm green single-column layout and deep-focus CSS follow the upstream redesign. In focusing, paused and completed states, all secondary sections (including personality details inside Leaderboards) recede; break and idle states restore them. Timer, screen-lock, notification and outbox modules retain upstream behaviour.
