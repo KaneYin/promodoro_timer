@@ -95,35 +95,7 @@ class ScreenUsageSavedOut(BaseModel):
     result: Literal["created", "updated", "ignored_stale"]
 
 
-# --- Leaderboards ------------------------------------------------------------
-class LeaderboardEntry(BaseModel):
-    user_id: int
-    display_name: str
-    # None only when data_status == "no_data" (missing data is NOT zero).
-    duration_seconds: int | None
-    # Only available entries are ranked.
-    rank: int | None
-    data_status: DataStatus
-    # Screen metric only: when the device's data was last received. None for focus.
-    last_synced_at_utc: str | None = None
-    # Screen metric only: number of days in the period that have a row. None for focus.
-    days_with_data: int | None = None
-    # Elapsed calendar days in this window, including today but excluding future days.
-    days_expected: int | None = None
-
-
-class LeaderboardOut(BaseModel):
-    metric: Metric
-    period: Period
-    period_start: date
-    period_end_exclusive: date
-    timezone: str
-    order: Order
-    generated_at_utc: str
-    entries: list[LeaderboardEntry]
-
-
-# --- Shared focus chart ------------------------------------------------------
+# --- Focus personality (shared by charts and rankings) ------------------------
 class FocusRhythmWindow(BaseModel):
     key: str
     label: str
@@ -145,6 +117,37 @@ class FocusRhythm(BaseModel):
     windows: list[FocusRhythmWindow]
 
 
+# --- Leaderboards ------------------------------------------------------------
+class LeaderboardEntry(BaseModel):
+    user_id: int
+    display_name: str
+    # None only when data_status == "no_data" (missing data is NOT zero).
+    duration_seconds: int | None
+    # Only available entries are ranked.
+    rank: int | None
+    data_status: DataStatus
+    # Screen metric only: when the device's data was last received. None for focus.
+    last_synced_at_utc: str | None = None
+    # Screen metric only: number of days in the period that have a row. None for focus.
+    days_with_data: int | None = None
+    # Elapsed calendar days in this window, including today but excluding future days.
+    days_expected: int | None = None
+    # Focus time-of-day personality for this exact leaderboard window.
+    rhythm: FocusRhythm | None = None
+
+
+class LeaderboardOut(BaseModel):
+    metric: Metric
+    period: Period
+    period_start: date
+    period_end_exclusive: date
+    timezone: str
+    order: Order
+    generated_at_utc: str
+    entries: list[LeaderboardEntry]
+
+
+# --- Shared focus chart ------------------------------------------------------
 class FocusDatesOut(BaseModel):
     timezone: str
     dates: list[date]

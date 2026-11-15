@@ -5,9 +5,11 @@ import assert from "node:assert/strict";
 import { MemoryStorage } from "./storage.js";
 import { createDOM, contents } from "./dom.js";
 import { statsFixture } from "./chart-fixture.js";
+import { rhythmFixture } from "./personality-fixture.js";
+import { descendants } from "./dom.js";
 
 async function boot({usersAvailable=true, idleDetector=null}={}) {
-  const events={},intervals=[],alerts=[],posted=[],chartRequests=[];
+  const events={},intervals=[],alerts=[],posted=[],chartRequests=[],leaderboardRequests=[];
   const originalNow=Date.now;
   let now=originalNow();
   Date.now=()=>now;
@@ -30,19 +32,44 @@ async function boot({usersAvailable=true, idleDetector=null}={}) {
     }
     if(url.pathname==="/api/users"){userCalls++;if(!usersAvailable)throw Error("offline");}
     if(!online)throw Error("offline");
-    if(url.pathname==="/api/focus-stats/dates") return {ok:true,json:async()=>({timezone:"America/Chicago",dates:["2026-11-11"]})};
+    if(url.pathname==="/api/focus-stats/dates") return {ok:true,json:async()=>({timezone:"America/Chicago",dates:["2026-11-13","2026-11-11"]})};
     if(url.pathname==="/api/focus-stats"){
       chartRequests.push(url);
       return {ok:true,json:async()=>statsFixture(url.searchParams.get("period"))};
     }
+    if(url.pathname==="/api/leaderboards")leaderboardRequests.push(url);
     const data=url.pathname==="/api/users"?[{id:1,display_name:"Yinkun"},{id:2,display_name:"Ruiping"}]:url.pathname==="/api/health"?{status:"ok"}:url.pathname==="/api/focus-sessions"?[{focus_seconds:1500}]:{metric:url.searchParams.get("metric"),period_start:"2026-11-11",period_end_exclusive:"2026-11-12",timezone:"America/Chicago",entries:[{user_id:1,display_name:"Yinkun",duration_seconds:1500,rank:1,data_status:"available",days_with_data:1,days_expected:1}]};
+    if(url.pathname==="/api/leaderboards") {
+      const period=url.searchParams.get("period");
+      const key=period==="week"?"flexible":period==="month"?"discovering":url.searchParams.get("date")==="2026-11-13"?"night_owl":"early_bird";
+      data.entries[0].rhythm=rhythmFixture(key,period);
+    }
     return {ok:true,json:async()=>data};
   };
   await import(`../../app/static/js/app.js?test=${Math.random()}`);
   const settle=async()=>{for(let i=0;i<6;i++)await new Promise(resolve=>setTimeout(resolve,0));};
   await settle();
-  return {node,document,events,intervals,alerts,posted,chartRequests,settle,advance:ms=>{now+=ms;},get userCalls(){return userCalls;},setOnline:v=>{online=v;},setUsers:v=>{usersAvailable=v;},cleanup:()=>{if(idleDetector) delete globalThis.IdleDetector;globalThis.setInterval=originalInterval;Date.now=originalNow;}};
+  return {node,document,events,intervals,alerts,posted,chartRequests,leaderboardRequests,settle,advance:ms=>{now+=ms;},get userCalls(){return userCalls;},setOnline:v=>{online=v;},setUsers:v=>{usersAvailable=v;},cleanup:()=>{if(idleDetector) delete globalThis.IdleDetector;globalThis.setInterval=originalInterval;Date.now=originalNow;}};
 }
+
+test("chart date and both sets of period controls update leaderboard personalities together",async()=>{
+  const app=await boot();
+  try{
+    const personality=()=>descendants(app.node("lb-list")).find(n=>n.className==="personality-icon").getAttribute("aria-label");
+    app.node("chart-date").value="2026-11-13";app.node("chart-date").events.change();await app.settle();
+    assert.equal(app.leaderboardRequests.at(-1).searchParams.get("date"),"2026-11-13");
+    assert.equal(personality(),"Focus personality: Night Owl");
+    const weekly=app.node("leaderboard").querySelectorAll("[data-period]").find(n=>n.dataset.period==="week");
+    weekly.events.click();await app.settle();
+    assert.equal(app.node("chart-week").getAttribute("aria-pressed"),"true");
+    assert.equal(app.leaderboardRequests.at(-1).searchParams.get("period"),"week");
+    assert.equal(app.leaderboardRequests.at(-1).searchParams.get("date"),app.chartRequests.at(-1).searchParams.get("date"));
+    assert.equal(personality(),"Focus personality: Flexible Focuser");
+    app.node("chart-month").events.click();await app.settle();
+    assert.equal(app.leaderboardRequests.at(-1).searchParams.get("period"),"month");
+    assert.equal(personality(),"Focus personality: Discovering Your Rhythm");
+  }finally{app.cleanup();}
+});
 
 test("disconnect clears statistics and old ranks",async()=>{
   const app=await boot();

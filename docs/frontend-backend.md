@@ -107,7 +107,7 @@ Retry triggers: right after completion, every 60 s, on the browser `online` even
 | Leaderboard panel | `GET /api/leaderboards?metric=…&period=…&order=…` |
 | Shared Focus chart | `GET /api/focus-stats?period=…&date=…` (always both users; no user filter) |
 | Chart history options | `GET /api/focus-stats/dates` (completion and rhythm dates across both users) |
-| Today's Focus Rhythm | `series[].rhythm` from `GET /api/focus-stats?period=day` for today; only the selected user's series is rendered |
+| Focus personality icons and Details | `entries[].rhythm` from the leaderboard response; shares the chart's period/history selection |
 
 Statistics and leaderboards refresh every 60 s, on tab visibility recovery, and after a session sync. Health is also checked every 30 s. A failed initial user request is retried after a successful health check until the list loads.
 The shared chart follows the same refresh triggers, preserving its own selected date/period. Switching the personal user does not alter the comparison chart. It uses SVG with adjacent bars, tooltip/selection details, stable colors by user id and an expandable table. Offline transitions invalidate in-flight chart requests and clear prior totals.
@@ -151,3 +151,5 @@ All server strings are inserted with `textContent` (`el()` helper), never `inner
 - No real-time timer sync across different browsers or devices.
 - Sleep time counts as focus time (wall clock). Use Reset if that is wrong.
 - Anyone who can open the page can choose either user.
+
+The calm green single-column layout and deep-focus CSS follow the upstream redesign. In focusing, paused and completed states, all secondary sections (including personality details inside Leaderboards) recede; break and idle states restore them. Timer, screen-lock, notification and outbox modules retain upstream behaviour.

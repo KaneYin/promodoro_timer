@@ -12,12 +12,13 @@ FastAPI · SQLite · vanilla JavaScript · no accounts · no build step · priva
 [![Vanilla JS](https://img.shields.io/badge/JavaScript-no%20build%20step-F7DF1E?logo=javascript&logoColor=black)](app/static/js)
 [![ActivityWatch](https://img.shields.io/badge/ActivityWatch-screen%20time-4E7BA4)](https://activitywatch.net/)
 
+**English** · [简体中文](README.zh-CN.md)
+
 [Quick start](#quick-start) · [Features](#features) · [How it works](#how-it-works) · [FAQ](#faq) · [Docs](#documentation)
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/timer-dark.png" />
-  <img src="docs/images/timer-light.png" alt="Focus Tracker Pomodoro timer showing a 25:00 focus session with Pomodoro and Count up modes" width="820" />
-</picture>
+<img src="docs/images/overview.png" alt="Focus Tracker: green single-column design with Pomodoro and Count up modes" width="820" />
+
+<sub>Actual app interface with sample data. The app interface is in English.</sub>
 
 </div>
 
@@ -41,26 +42,79 @@ It is for study partners, remote coworkers, couples or friends who want a shared
 
 ## Features
 
-<div align="center">
-  <img src="docs/images/stats.png" alt="Focus Tracker stats: sessions today, focus this week, a two-user daily focus bar chart, an Early Bird focus personality card and a Focus leaderboard" width="720" />
-</div>
-
 ### Timer
+
+- **Calm focus view:** the green single-column design is preserved. Start hides statistics, the chart and leaderboards; Pause keeps this focused view. During a break or after returning to idle, the secondary content returns.
+
 - **Pomodoro timer:** persistent 25-minute focus / 5-minute break timer with pause/resume, reset and delayed-reopen recovery.
 - **Count-up mode:** Stop & save records actual whole seconds as one session and automatically stops and saves at 2 hours. Modes cannot run simultaneously in the same browser origin.
 - **Silent notifications:** opt-in browser notifications for focus/break completion. Use **Enable silent notifications** and allow the browser prompt. Unsupported browsers keep an in-page completion message. No audio is played.
 
 ### Stats and leaderboards
+
 - **Focus leaderboards:** local-day history and day/week/month leaderboards, including DST boundaries and competition ranks.
 - **Two-user focus chart:** shared bar chart below personal stats showing daily completion hours, weekly days and monthly Monday-aligned weeks. It opens the current period using the browser clock. The history menu lists only periods with recorded sessions. It uses fixed user colors and includes an accessible data table.
-- **Personality:** a full-width "Today's Personality" card above the Leaderboards shows the selected user's focus rhythm for today (for example Early Bird or Night Owl) as a large icon with one short sentence and a simple time-of-day breakdown. Other users' results are not shown. See [Focus Rhythm](docs/focus-rhythm.md) for definitions and attribution.
+- **Focus personality:** a compact icon beside each name in Leaderboards describes the selected day, week or month. Hover over the icon (or focus it with the keyboard) to read its English name. Expand **Details** for a pie chart, each time window’s percentage and duration, and active days. **Rules ↗** opens a read-only explanation in a new tab. See [Focus Rhythm](docs/focus-rhythm.md) for the full definitions.
 - **Screen Time leaderboard:** ActivityWatch foreground-window time intersected with not-AFK time, with cumulative daily snapshots and historical backfill.
 - **Honest coverage:** screen data that is incomplete, stale or missing is displayed but never ranked.
 
 ### Reliability
+
 - **Offline-safe outbox:** completed sessions are queued, retried automatically, deduplicated by UUID and stored per record so tabs cannot overwrite each other.
 - **Backups:** SQLite initialization, verified online backups and retention.
 - **Tested:** automated checks cover Python services/API/agent and JavaScript timer/outbox/controller behavior. Real ActivityWatch accuracy, macOS login startup and two-machine Tailscale access require the manual checks in [testing](docs/testing.md).
+
+## See it in action
+
+The screenshots below show the real frontend with **sample data**, not live personal records. The two example users have different study schedules.
+
+### Start a session without distractions
+
+Press **Start**: the surrounding content fades out, leaving the timer and session controls. The existing green theme, quiet header, dark mode and reduced-motion preference are retained.
+
+<img src="docs/images/focusing.png" alt="Active Pomodoro session in the green focus view, with statistics and leaderboards hidden" width="650" />
+
+### Pick a day, week or month
+
+In **Focus comparison**, choose **Daily**, **Weekly** or **Monthly**, then select a current or recorded period from the date menu. Leaderboards and both users’ personality icons follow that selection. The period buttons in Leaderboards also update the chart. The **Your stats** summary keeps showing today and this week.
+
+<img src="docs/images/history.png" alt="Daily focus comparison with November 13, 2026 selected from the history menu" width="560" />
+
+### A small icon beside each name
+
+On November 13 in this example, Yinkun’s late-night focus makes him a **Night Owl**; Ruiping’s morning focus makes her an **Early Bird**. Both results belong to the selected date.
+
+<img src="docs/images/badges.png" alt="November 13 leaderboard: a Night Owl icon beside Yinkun and an Early Bird icon beside Ruiping, with Details collapsed" width="820" />
+
+### Open Details when you want the breakdown
+
+Select **Weekly** and expand **Details**. In this example, 59.2% of Yinkun’s weekly focus falls in the Early Bird window and 40.8% in Night Owl. Labels use the whole selected period’s focus duration; they are not a vote of its daily labels.
+
+<img src="docs/images/details.png" alt="Weekly leaderboard with Details expanded: Early Bird 59.2%, Night Owl 40.8%, and a pie chart for Yinkun" width="820" />
+
+### Understand the rules
+
+Use **Rules ↗** in the corner of Leaderboards. The separate page lists time windows, minimum data and the selection rule. All times use **America/Chicago**; weeks run Monday–Sunday and months follow the calendar.
+
+| Local time | Personality |
+|---|---|
+| 02:00–06:00 | 🌌 Before-Dawn Learner |
+| 06:00–10:00 | 🐦 Early Bird |
+| 10:00–14:00 | ☀️ Midday Focuser |
+| 14:00–18:00 | 🌤️ Afternoon Learner |
+| 18:00–22:00 | 🌆 Evening Learner |
+| 22:00–02:00 | 🦉 Night Owl |
+
+A window needs **at least 50%** of focus time and a lead of **at least 15 percentage points**. Minimum data: daily **25 minutes**; weekly **100 minutes across 3 days**; monthly **300 minutes across 7 days**. With enough data but no dominant window, the result is **🎨 Flexible Focuser**. Less data shows **🔎 Discovering Your Rhythm**; no focus shows **🌱 No Focus Yet**. These describe timing, not how productive someone is.
+
+<details>
+<summary>View the Personality Rules page</summary>
+
+<img src="docs/images/rules.png" alt="Personality Rules page with six time windows, daily/weekly/monthly minimums and label selection conditions" width="650" />
+
+</details>
+
+Completed sessions are split across time windows and midnight for personality calculations. Pauses and breaks are excluded for new records; older records use estimated timing disclosed in Details. Chart and ranking totals use session completion dates, so their totals can differ from the personality breakdown at calendar boundaries.
 
 ## How it works
 
@@ -85,7 +139,7 @@ flowchart LR
 1. The browser runs the timer locally and queues each completed session in an outbox.
 2. The outbox posts sessions to the FastAPI server, which validates, deduplicates and stores them in SQLite.
 3. On each Mac, the agent reads ActivityWatch and uploads cumulative daily screen time for that device.
-4. The page polls the API for stats, the comparison chart, today's focus personality and the leaderboards.
+4. The page polls the API for stats, the comparison chart, the selected period’s focus personalities and leaderboards.
 
 ## Quick start
 
@@ -93,6 +147,8 @@ Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/). Node.js 22+ is only 
 Run commands from the repository root. **Before the first initialization**, edit display/device names in `database/seed.sql`. After initialization, rename existing rows with SQL `UPDATE`.
 
 ```bash
+git clone --branch reference/complete-implementation https://github.com/KaneYin/promodoro_timer.git
+cd promodoro_timer
 uv sync
 uv run --no-sync python scripts/init_db.py
 uv run --no-sync uvicorn app.main:app --host 127.0.0.1 --port 8000
@@ -162,7 +218,7 @@ An already loaded page keeps timing offline, and completed sessions wait in a br
 Keep the server bound to `127.0.0.1` and publish it to your tailnet with Tailscale Serve. Do not use Tailscale Funnel, because the app has no authentication. See [deployment](docs/deployment.md).
 
 **What do labels like "Early Bird" and "Night Owl" mean?**
-They describe when most of today's focus time happened, in fixed time windows in America/Chicago. They are descriptive labels, not productivity scores. The rules are in [Focus Rhythm](docs/focus-rhythm.md).
+They describe when focus time happened in the selected day, week or month, using fixed time windows in America/Chicago. They are descriptive labels, not productivity scores. The rules are in [Focus Rhythm](docs/focus-rhythm.md).
 
 **Do I need Node.js or a frontend build?**
 No. The frontend is plain HTML, CSS and ES modules served by FastAPI. Node.js 22+ is only used to run the JavaScript tests.
@@ -178,6 +234,7 @@ No. The frontend is plain HTML, CSS and ES modules served by FastAPI. Node.js 22
 | `agent/` | Local ActivityWatch collection and HTTP sync |
 | `database/`, `scripts/` | Schema, seed, initialization and backup |
 | `tests/` | Python and JavaScript regression tests |
+| [Product](PRODUCT.md) / [Design rationale](docs/design-rationale.md) | Calm layout, focus view and visual design rationale |
 | [Design](docs/design.md) | Goals, invariants, coverage policy and limits |
 | [API](docs/api.md) | Endpoint contracts and errors |
 | [Database](docs/database.md) | Tables, connection settings and privacy |
@@ -200,6 +257,8 @@ git diff main..reference/complete-implementation -- app/services agent/collector
 ```
 
 ## Contributing
+
+User-visible feature changes must update **both [English](README.md) and [简体中文](README.zh-CN.md) READMEs** in the same change, including usage steps and screenshots when the UI changes. Use real app captures with example data clearly labeled. See [the project working conventions](AGENTS.md).
 
 Issues and pull requests are welcome. Please run `uv run --no-sync pytest -q` and `npm test` before opening a PR, and read [Design](docs/design.md) for the invariants the app keeps.
 

@@ -11,6 +11,7 @@ export function createDOM() {
       this.attributes = {};
       this.textContent = "";
       this.value = "";
+      this.queries = new Map();
     }
     setAttribute(key, value) { this.attributes[key] = value; this[key] = value; }
     getAttribute(key) { return this.attributes[key]; }
@@ -19,8 +20,11 @@ export function createDOM() {
     addEventListener(name, callback) { this.events[name] = callback; }
     querySelector(selector) { return node(selector.slice(1)); }
     querySelectorAll(selector) {
+      if (this.queries.has(selector)) return this.queries.get(selector);
       const values = {"[data-metric]": ["focus", "screen"], "[data-period]": ["day", "week", "month"], "[data-order]": ["asc", "desc"]}[selector] ?? [];
-      return values.map(value => Object.assign(new Element("button"), { dataset: { [selector.slice(6, -1)]: value } }));
+      const found = values.map(value => Object.assign(new Element("button"), { dataset: { [selector.slice(6, -1)]: value } }));
+      this.queries.set(selector, found);
+      return found;
     }
   }
   const node = id => { if (!nodes.has(id)) nodes.set(id, new Element()); return nodes.get(id); };

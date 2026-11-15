@@ -1,76 +1,72 @@
-// Today's Personality for the selected user only: a prominent icon, one small sentence and a short breakdown.
-import { getFocusStats, ApiError } from "./api.js";
-import { el, formatDuration, todayInTimezone } from "./util.js";
+import { el, formatDuration } from "./util.js";
 
-const article = (label) => (/^[aeiou]/i.test(label) ? "an" : "a");
+const SVG_NS = "http://www.w3.org/2000/svg";
+const percent = (share) => `${Math.round(share * 1000) / 10}%`;
 
-export function rhythmSentence(rhythm) {
-  if (rhythm.key === "no_focus") return "Complete a focus session to start discovering your personality.";
-  if (rhythm.key === "discovering") {
-    return `Still discovering your personality: ${formatDuration(rhythm.total_seconds)} of ${formatDuration(rhythm.minimum_seconds)} focused so far today.`;
-  }
-  const window = rhythm.windows.find((item) => item.key === rhythm.key);
-  const name = `${article(rhythm.label)} ${rhythm.label}`;
-  const detail = window
-    ? `${Math.round(window.share * 100)}% of your focus today fell between ${window.time_range}.`
-    : "your focus today spanned different parts of the day.";
-  return `You're ${name}${window ? ". " : ": "}${detail}`;
+function svg(tag, attributes = {}, ...children) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, String(value));
+  for (const child of children) node.append(typeof child === "string" ? document.createTextNode(child) : child);
+  return node;
 }
 
-export function rhythmCard(series) {
-  const rhythm = series?.rhythm;
-  if (!rhythm) return el("p", { class: "chart-message" }, "Personality unavailable. Refresh after updating the server.");
-  const used = rhythm.windows.filter((item) => item.duration_seconds > 0);
-  return el("article", { class: "rhythm-card", dataset: { rhythm: rhythm.key } },
-    el("div", { class: "rhythm-icon", "aria-hidden": "true" }, rhythm.emoji),
-    el("p", { class: "rhythm-sentence" }, rhythmSentence(rhythm)),
-    used.length ? el("details", { class: "rhythm-distribution" },
-      el("summary", {}, "View time-of-day breakdown"),
-      el("ul", {}, ...used.map((item) => el("li", {},
-        el("span", {}, `${item.emoji} ${item.time_range}`),
-        el("strong", {}, `${Math.round(item.share * 100)}%`),
-      ))),
-    ) : null,
+// Use durations, not rounded display percentages, to draw exact proportions.
+export function pieData(windows) {
+  const durations = windows.map((w) => Number.isFinite(w.duration_seconds) ? Math.max(0, w.duration_seconds) : 0);
+  const total = durations.reduce((sum, seconds) => sum + seconds, 0);
+  let angle = -Math.PI / 2;
+  return windows.map((window, index) => {
+    const share = total ? durations[index] / total : 0;
+    const start = angle;
+    angle += share * Math.PI * 2;
+    const x = (a) => 100 + 82 * Math.cos(a), y = (a) => 100 + 82 * Math.sin(a);
+    return { ...window, share, color: `var(--personality-${index})`,
+      path: share > 0 && share < 1 ? `M 100 100 L ${x(start)} ${y(start)} A 82 82 0 ${share > .5 ? 1 : 0} 1 ${x(angle)} ${y(angle)} Z` : null };
+  });
+}
+
+export function personalityBadge(rhythm, userId) {
+  if (!rhythm) return null;
+  const id = `personality-label-${userId}`;
+  return el("span", { class: "personality-badge", dataset: { personality: rhythm.key } },
+    el("span", { class: "personality-icon", tabindex: "0", role: "img",
+      "aria-label": `Focus personality: ${rhythm.label}`, "aria-describedby": id }, rhythm.emoji),
+    el("span", { class: "personality-tooltip", id, role: "tooltip" }, rhythm.label),
   );
 }
 
-export function createFocusRhythm({ root, getUserId, getToday = todayInTimezone }) {
-  const list = root.querySelector("#rhythm-list");
-  let sequence = 0, latest = null;
-
-  const message = (text) => list.replaceChildren(el("p", { class: "chart-message" }, text));
-
-  // The response holds every user's rhythm; only the selected user's is rendered.
-  function show() {
-    const userId = getUserId();
-    if (userId === null || userId === undefined) return message("Select a user to see your personality.");
-    if (!latest) return; // keep the loading or offline message until data arrives
-    const mine = latest.series.find((series) => series.user_id === userId);
-    if (mine) list.replaceChildren(rhythmCard(mine));
-    else message("Personality unavailable for this user.");
+export function personalityDetails(entry, { open = false, onToggle = () => {} } = {}) {
+  const rhythm = entry.rhythm;
+  if (!rhythm) return null;
+  const windows = pieData(rhythm.windows);
+  const active = windows.filter((w) => w.share > 0);
+  const label = active.length ? active.map((w) => `${w.label}: ${percent(w.share)}`).join(", ") : "No completed focus time in the selected period.";
+  const chart = svg("svg", { viewBox: "0 0 200 200", class: "personality-pie", role: "img",
+    "aria-label": `${entry.display_name}'s focus time by time of day. ${label}` }, svg("title", {}, label));
+  if (!active.length) chart.append(svg("circle", { cx: 100, cy: 100, r: 82, fill: "var(--line)" }));
+  for (const w of active) {
+    const shape = w.share === 1 ? svg("circle", { cx: 100, cy: 100, r: 82, fill: w.color }) : svg("path", { d: w.path, fill: w.color });
+    shape.append(svg("title", {}, `${w.label}: ${percent(w.share)}`));
+    chart.append(shape);
   }
-
-  async function refresh() {
-    const seq = ++sequence;
-    if (getUserId() === null || getUserId() === undefined) return show();
-    try {
-      const data = await getFocusStats({ period: "day", date: getToday() });
-      if (seq !== sequence) return;
-      latest = data;
-      show();
-    } catch (error) {
-      if (seq !== sequence) return;
-      message(error instanceof ApiError && error.isNetwork
-        ? "Cannot reach the server. Personality will return after reconnecting."
-        : `Could not load personality: ${error.message}`);
-    }
-  }
-
-  function setOffline() {
-    sequence += 1;
-    latest = null;
-    message("Cannot reach the server. Personality will return after reconnecting.");
-  }
-
-  return { refresh, show, setOffline };
+  const note = rhythm.key === "no_focus" ? "No completed focus time in this period."
+    : rhythm.key === "discovering" ? `Discovering Your Rhythm: ${formatDuration(rhythm.total_seconds)} of ${formatDuration(rhythm.minimum_seconds)}, ${rhythm.active_days} of ${rhythm.minimum_days} active days recorded.`
+    : `${formatDuration(rhythm.total_seconds)} of focus · ${rhythm.active_days} active ${rhythm.active_days === 1 ? "day" : "days"}`;
+  const panel = el("details", { class: "personality-details" },
+    el("summary", { "aria-label": `Focus personality details for ${entry.display_name}` }, "Details"),
+    el("div", { class: "personality-breakdown" }, chart,
+      el("ul", { class: "personality-legend" }, ...windows.map((w) => el("li", {},
+        el("span", { class: "personality-window" },
+          el("span", { class: "personality-swatch", style: `background:${w.color}`, "aria-hidden": "true" }),
+          el("span", {}, w.label, el("small", {}, w.time_range)),
+        ),
+        el("span", { class: "personality-share" }, el("strong", {}, percent(w.share)), el("small", {}, formatDuration(w.duration_seconds))),
+      ))),
+    ),
+    el("p", { class: "personality-note" }, note),
+    rhythm.estimated_seconds > 0 ? el("p", { class: "personality-note" }, `Includes ${formatDuration(rhythm.estimated_seconds)} of estimated timing from older sessions.`) : null,
+  );
+  panel.open = open;
+  panel.addEventListener("toggle", () => onToggle(panel.open));
+  return panel;
 }

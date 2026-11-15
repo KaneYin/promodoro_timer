@@ -2,7 +2,7 @@
 
 import sqlite3
 import unittest
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -15,6 +15,7 @@ from app.schemas import FocusSessionIn
 from app.services.focus_rhythm_service import classify, get_focus_rhythms
 from app.services.focus_service import save_focus_session
 from app.services.focus_stats_service import get_focus_dates, get_focus_stats
+from app.services.leaderboard_service import get_leaderboard
 
 
 class FocusRhythmTests(unittest.TestCase):
@@ -161,6 +162,28 @@ class FocusRhythmTests(unittest.TestCase):
         rhythm = self.rhythm()
         self.assertAlmostEqual(rhythm.total_seconds,1501)
         self.assertEqual(rhythm.key,"midday")
+
+    def test_leaderboard_personality_uses_requested_day_and_focus_data_for_both_metrics(self):
+        self.save([("2026-11-10T06:00:00-06:00","2026-11-10T06:25:00-06:00")])
+        self.save([("2026-11-11T22:00:00-06:00","2026-11-11T22:25:00-06:00")])
+        for metric in ("focus", "screen"):
+            for day, expected in ((10,"early_bird"),(11,"night_owl"),(12,"no_focus")):
+                board=get_leaderboard(self.conn,metric,"day",date(2026,11,day),None)
+                entry=next(e for e in board.entries if e.user_id==1)
+                self.assertEqual(entry.rhythm.key,expected)
+                self.assertEqual(entry.rhythm.model_dump(),self.rhythm(f"2026-11-{day}").model_dump())
+                if metric=="screen":
+                    self.assertEqual(entry.data_status,"no_data")
+                    self.assertIsNone(entry.rank)
+
+    def test_leaderboard_week_month_personalities_aggregate_the_requested_window(self):
+        for day, hour, minutes in ((10,6,25),(11,22,25),(12,22,70)):
+            start=datetime(2026,11,day,hour,tzinfo=config.LEADERBOARD_TZ)
+            self.save([(start.isoformat(),(start+timedelta(minutes=minutes)).isoformat())])
+        week=get_leaderboard(self.conn,"focus","week",date(2026,11,11),None).entries[0].rhythm
+        month=get_leaderboard(self.conn,"focus","month",date(2026,11,11),None).entries[0].rhythm
+        self.assertEqual((week.key,week.total_seconds,week.active_days),("night_owl",7200,3))
+        self.assertEqual((month.key,month.total_seconds,month.minimum_days),("discovering",7200,7))
 
 
 if __name__ == "__main__":

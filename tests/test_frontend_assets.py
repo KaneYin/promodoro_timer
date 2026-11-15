@@ -46,3 +46,17 @@ def test_legacy_assets_and_conditional_responses_require_revalidation(client):
         cached = client.get(path, headers={"If-None-Match": response.headers["etag"]})
         assert cached.status_code == 304
         assert cached.headers["cache-control"] == "no-cache"
+
+
+def test_personality_rules_is_a_read_only_page_linked_from_leaderboards(client):
+    html = client.get("/").text
+    assert 'id="rhythm-list"' not in html
+    assert 'href="/personality-rules.html" target="_blank" rel="noopener"' in html
+    page = client.get("/personality-rules.html")
+    assert page.status_code == 200
+    assert page.headers["cache-control"] == "no-cache"
+    assert "<script" not in page.text and "<form" not in page.text
+    for label in ("Early Bird", "Night Owl", "Flexible Focuser", "Discovering Your Rhythm"):
+        assert label in page.text
+    assert "≥50%" in page.text and "≥15 percentage points" in page.text
+    assert "America/Chicago" in page.text
