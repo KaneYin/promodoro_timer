@@ -10,7 +10,7 @@ FastAPI · SQLite · 原生 JavaScript · 无需账号 · 无需前端构建 · 
 
 [快速开始](#快速开始) · [主要功能](#主要功能) · [看图上手](#看图上手) · [常见问题](#常见问题) · [文档](#文档)
 
-<img src="docs/images/overview.png" alt="Focus Tracker 实际界面：25 分钟番茄钟、个人统计和双人每周专注对比图" width="820" />
+<img src="docs/images/overview.png" alt="Focus Tracker 实际界面：绿色单列布局，提供番茄钟和正计时模式" width="820" />
 
 <sub>实际应用界面，使用示例数据。软件界面目前为英文。</sub>
 
@@ -35,6 +35,8 @@ Focus Tracker 是一个为两位伙伴设计的专注工具。你可以用番茄
 
 ### 专注计时
 
+- **安静的专注界面：** 保留绿色主题和单列布局。点击 Start 后，统计、图表与排行榜淡出；暂停时仍保持纯计时视图。进入休息或回到待开始状态后，其他内容恢复。
+
 - **番茄钟（Pomodoro）：** 默认 25 分钟专注、5 分钟休息，支持暂停、继续和重置；重新打开页面后恢复计时状态。
 - **正计时（Count up）：** 适合时长不固定的任务。点击 **Stop & save** 保存实际秒数，暂停时也能保存；满 2 小时自动停止并保存。同一浏览器来源下，两种模式不能同时运行。
 - **静默通知：** 点击 **Enable silent notifications** 并允许浏览器通知后，专注或休息结束时显示无声通知。不支持的浏览器保留页面内提示。
@@ -55,6 +57,12 @@ Focus Tracker 是一个为两位伙伴设计的专注工具。你可以用番茄
 ## 看图上手
 
 以下截图来自真实前端，使用的是**示例数据**，不是真实个人记录。界面按钮保留英文，方便与软件对应。
+
+### 开始专注，隐藏其他内容
+
+点击 **Start** 后，页面淡出其他区域，突出计时器和本次计时控制。保留原版绿色主题、低透明度页眉、深色模式，以及减少动态效果的系统偏好。
+
+<img src="docs/images/focusing.png" alt="绿色主题的番茄钟运行中：统计、图表和排行榜已隐藏，只突出计时区域" width="650" />
 
 ### 1. 选择想看的日期
 
@@ -202,6 +210,7 @@ uv run --no-sync python scripts/backup_db.py --verify
 | `agent/` | ActivityWatch 采集与同步 |
 | `database/`、`scripts/` | 表结构、种子数据、初始化与备份 |
 | `tests/` | Python 与 JavaScript 回归检查 |
+| [Product](PRODUCT.md) / [Design rationale](docs/design-rationale.md) | 单列布局、纯计时视图与视觉设计依据 |
 | [Design](docs/design.md) | 设计目标、数据覆盖策略与限制 |
 | [API](docs/api.md) | 接口与错误约定 |
 | [Database](docs/database.md) | 数据表、连接配置与隐私 |

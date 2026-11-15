@@ -4,6 +4,8 @@
 
 Key facts:
 
+- Calm green single-column layout. Start hides secondary content; pause retains the focus view, while break/idle restores it. Dark mode and reduced motion are supported.
+
 - Default timer: 25-minute focus / 5-minute break. Count-up mode saves actual seconds and stops automatically at 2 hours.
 - Two trusted users, no authentication. The server binds to 127.0.0.1. Tailscale Funnel must not be used.
 - Completed sessions go through an offline browser outbox with retry and UUID deduplication.

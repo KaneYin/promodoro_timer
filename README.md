@@ -16,7 +16,7 @@ FastAPI · SQLite · vanilla JavaScript · no accounts · no build step · priva
 
 [Quick start](#quick-start) · [Features](#features) · [How it works](#how-it-works) · [FAQ](#faq) · [Docs](#documentation)
 
-<img src="docs/images/overview.png" alt="Focus Tracker: 25-minute Pomodoro timer, personal statistics and a weekly two-person focus comparison" width="820" />
+<img src="docs/images/overview.png" alt="Focus Tracker: green single-column design with Pomodoro and Count up modes" width="820" />
 
 <sub>Actual app interface with sample data. The app interface is in English.</sub>
 
@@ -44,6 +44,8 @@ It is for study partners, remote coworkers, couples or friends who want a shared
 
 ### Timer
 
+- **Calm focus view:** the green single-column design is preserved. Start hides statistics, the chart and leaderboards; Pause keeps this focused view. During a break or after returning to idle, the secondary content returns.
+
 - **Pomodoro timer:** persistent 25-minute focus / 5-minute break timer with pause/resume, reset and delayed-reopen recovery.
 - **Count-up mode:** Stop & save records actual whole seconds as one session and automatically stops and saves at 2 hours. Modes cannot run simultaneously in the same browser origin.
 - **Silent notifications:** opt-in browser notifications for focus/break completion. Use **Enable silent notifications** and allow the browser prompt. Unsupported browsers keep an in-page completion message. No audio is played.
@@ -65,6 +67,12 @@ It is for study partners, remote coworkers, couples or friends who want a shared
 ## See it in action
 
 The screenshots below show the real frontend with **sample data**, not live personal records. The two example users have different study schedules.
+
+### Start a session without distractions
+
+Press **Start**: the surrounding content fades out, leaving the timer and session controls. The existing green theme, quiet header, dark mode and reduced-motion preference are retained.
+
+<img src="docs/images/focusing.png" alt="Active Pomodoro session in the green focus view, with statistics and leaderboards hidden" width="650" />
 
 ### Pick a day, week or month
 
@@ -226,6 +234,7 @@ No. The frontend is plain HTML, CSS and ES modules served by FastAPI. Node.js 22
 | `agent/` | Local ActivityWatch collection and HTTP sync |
 | `database/`, `scripts/` | Schema, seed, initialization and backup |
 | `tests/` | Python and JavaScript regression tests |
+| [Product](PRODUCT.md) / [Design rationale](docs/design-rationale.md) | Calm layout, focus view and visual design rationale |
 | [Design](docs/design.md) | Goals, invariants, coverage policy and limits |
 | [API](docs/api.md) | Endpoint contracts and errors |
 | [Database](docs/database.md) | Tables, connection settings and privacy |
