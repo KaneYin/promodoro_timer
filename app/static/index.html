@@ -7,13 +7,16 @@
     <title>Focus Tracker</title>
     <link
       rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🍅%3C/text%3E%3C/svg%3E"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23467a8c' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9' opacity='.35'/%3E%3Cpath d='M12 3a9 9 0 0 1 9 9'/%3E%3C/svg%3E"
     />
     <link rel="stylesheet" href="/css/style.css" />
   </head>
   <body data-phase="idle">
     <header class="topbar">
-      <div class="brand"><span aria-hidden="true">🍅</span> Focus Tracker</div>
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" opacity="0.35" /><path d="M12 3a9 9 0 0 1 9 9" /></svg>
+        Focus Tracker
+      </div>
       <div class="topbar-right">
         <label class="user-picker">
           <span class="sr-only">Current user</span>
@@ -28,7 +31,7 @@
     <main class="layout">
       <div id="sync-banner" class="banner" role="status" hidden></div>
 
-      <section class="card timer-card" aria-labelledby="timer-title">
+      <section class="timer-card" aria-labelledby="timer-title">
         <h2 id="timer-title" class="sr-only">Focus timer</h2>
         <div class="segmented timer-modes" role="group" aria-label="Timer mode">
           <button id="mode-pomodoro" type="button" aria-pressed="true">Pomodoro</button>
@@ -57,7 +60,7 @@
         </div>
       </section>
 
-      <section class="card" aria-labelledby="stats-title">
+      <section aria-labelledby="stats-title">
         <h2 id="stats-title">Your stats</h2>
         <dl class="stats">
           <div class="stat"><dt>Sessions today</dt><dd id="stat-count">—</dd></div>
@@ -84,16 +87,6 @@
             <select id="chart-date" aria-label="Current or recorded period"></select>
           </div>
           <div id="chart-range" class="chart-range"></div>
-          <section class="focus-rhythms" aria-labelledby="rhythm-title">
-            <h3 id="rhythm-title">Today's Focus Rhythm</h3>
-            <div id="rhythm-list" class="rhythm-list" aria-live="polite"><p class="chart-message">Loading focus rhythm...</p></div>
-            <details class="rhythm-rules">
-              <summary>How is my rhythm calculated?</summary>
-              <p>Based on completed focus time in America/Chicago. A time window needs at least 50% of your focus time and a lead of at least 15 percentage points; otherwise, your rhythm is Flexible Focuser.</p>
-              <p>Daily: 25 minutes. Weekly: 100 minutes across 3 days. Monthly: 300 minutes across 7 days. Until then, we are Discovering Your Rhythm.</p>
-              <p>Focus is split across time windows and midnight, with pauses excluded for new sessions. Older sessions use estimated timing. Rhythm totals may differ from the chart and rankings, which assign whole sessions to their completion date. Current periods show results so far.</p>
-            </details>
-          </section>
           <div id="chart-legend" class="chart-legend" aria-label="User colors and period totals"></div>
           <div id="chart-plot" class="chart-plot"><p class="chart-message">Loading focus chart...</p></div>
           <p id="chart-empty" class="chart-note" hidden>No completed focus sessions in this period.</p>
@@ -107,7 +100,12 @@
         </section>
       </section>
 
-      <section id="leaderboard" class="card" aria-labelledby="lb-title">
+      <section id="focus-rhythm" aria-labelledby="rhythm-title">
+        <h2 id="rhythm-title">Today's Personality</h2>
+        <div id="rhythm-list" class="rhythm-list" aria-live="polite"><p class="chart-message">Loading personality...</p></div>
+      </section>
+
+      <section id="leaderboard" aria-labelledby="lb-title">
         <h2 id="lb-title">Leaderboards</h2>
 
         <div class="tabs" role="tablist" aria-label="Metric">

@@ -1,12 +1,16 @@
 # Focus Rhythm
 
-Focus comparison displays a rhythm card for each user. Cards follow the same
-Daily / Weekly / Monthly and recorded-period controls. They update after a
-completed session syncs and during normal polling. Current periods describe
-results so far; offline/error states clear outdated labels.
+The full-width **Today's Personality** card sits above the Leaderboards. It shows a
+large icon and one short sentence describing the selected user's personality for today, for example
+"You're a Night Owl. 68% of your focus today fell between 10 PM–2 AM." A
+collapsed "View time-of-day breakdown" lists the time windows with focus and
+their percentages. Other users' rhythms are not displayed, and the calculation
+rules below are not shown in the page. The card updates after a completed
+session syncs and during normal polling, and offline/error states clear
+outdated labels. The rules in this document still describe the API.
 
 All classification uses the existing project timezone, **America/Chicago**,
-shown above the cards. There is no new per-user timezone preference. These are
+used by the server. There is no new per-user timezone preference. These are
 descriptive product labels, not assessments of productivity or biological chronotype.
 
 | English label | Local time window |

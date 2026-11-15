@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "app/static/index.html"
+        ],
+        "createdAt": "2026-11-14T05:56:40.225Z",
+        "reason": "assistant: .stat figures sit on hairline dividers by design (open row, no box); the flagged flush edge is the first figure aligned to the column's left edge, 16px inset applied between figures"
+      }
+    ]
+  }
+}

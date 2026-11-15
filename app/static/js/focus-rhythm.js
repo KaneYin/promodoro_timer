@@ -1,29 +1,76 @@
-import { el, formatDuration } from "./util.js";
+// Today's Personality for the selected user only: a prominent icon, one small sentence and a short breakdown.
+import { getFocusStats, ApiError } from "./api.js";
+import { el, formatDuration, todayInTimezone } from "./util.js";
 
-export function rhythmCard(series, period, { current = true } = {}) {
-  const rhythm = series.rhythm;
-  if (!rhythm) return el("article", { class: "rhythm-card" },
-    el("strong", {}, series.display_name), el("p", {}, "Focus rhythm unavailable. Refresh after updating the server."));
+const article = (label) => (/^[aeiou]/i.test(label) ? "an" : "a");
+
+export function rhythmSentence(rhythm) {
+  if (rhythm.key === "no_focus") return "Complete a focus session to start discovering your personality.";
+  if (rhythm.key === "discovering") {
+    return `Still discovering your personality: ${formatDuration(rhythm.total_seconds)} of ${formatDuration(rhythm.minimum_seconds)} focused so far today.`;
+  }
   const window = rhythm.windows.find((item) => item.key === rhythm.key);
-  const periodName = { day: "day", week: "week", month: "month" }[period];
-  const scope = current ? `this ${periodName}` : `the selected ${periodName}`;
-  let explanation;
-  if (rhythm.key === "no_focus") explanation = "Complete a focus session to start discovering your rhythm.";
-  else if (rhythm.key === "discovering") explanation = `Keep going: ${formatDuration(rhythm.total_seconds)} of ${formatDuration(rhythm.minimum_seconds)}, ${rhythm.active_days} of ${rhythm.minimum_days} active days recorded.`;
-  else if (window) explanation = `${Math.round(window.share * 100)}% of your focus time ${scope} fell in the ${window.time_range} window.`;
-  else explanation = `Your focus ${scope} spanned different parts of the day.`;
+  const name = `${article(rhythm.label)} ${rhythm.label}`;
+  const detail = window
+    ? `${Math.round(window.share * 100)}% of your focus today fell between ${window.time_range}.`
+    : "your focus today spanned different parts of the day.";
+  return `You're ${name}${window ? ". " : ": "}${detail}`;
+}
+
+export function rhythmCard(series) {
+  const rhythm = series?.rhythm;
+  if (!rhythm) return el("p", { class: "chart-message" }, "Personality unavailable. Refresh after updating the server.");
+  const used = rhythm.windows.filter((item) => item.duration_seconds > 0);
   return el("article", { class: "rhythm-card", dataset: { rhythm: rhythm.key } },
-    el("div", { class: "rhythm-user" }, series.display_name),
-    el("strong", { class: "rhythm-badge" }, `${rhythm.emoji} ${rhythm.label}`),
-    el("p", { class: "rhythm-explanation" }, explanation),
-    el("small", { class: "rhythm-summary" }, `${formatDuration(rhythm.total_seconds)} · ${rhythm.active_days} active ${rhythm.active_days === 1 ? "day" : "days"}`),
-    rhythm.estimated_seconds > 0 ? el("p", { class: "rhythm-estimate" }, `Includes ${formatDuration(rhythm.estimated_seconds)} of estimated timing from older sessions.`) : null,
-    el("details", { class: "rhythm-distribution" },
+    el("div", { class: "rhythm-icon", "aria-hidden": "true" }, rhythm.emoji),
+    el("p", { class: "rhythm-sentence" }, rhythmSentence(rhythm)),
+    used.length ? el("details", { class: "rhythm-distribution" },
       el("summary", {}, "View time-of-day breakdown"),
-      el("ul", {}, ...rhythm.windows.map((item) => el("li", {},
-        el("span", {}, `${item.emoji} ${item.label} (${item.time_range})`),
-        el("strong", {}, `${formatDuration(item.duration_seconds)} · ${Math.round(item.share * 100)}%`),
+      el("ul", {}, ...used.map((item) => el("li", {},
+        el("span", {}, `${item.emoji} ${item.time_range}`),
+        el("strong", {}, `${Math.round(item.share * 100)}%`),
       ))),
-    ),
+    ) : null,
   );
+}
+
+export function createFocusRhythm({ root, getUserId, getToday = todayInTimezone }) {
+  const list = root.querySelector("#rhythm-list");
+  let sequence = 0, latest = null;
+
+  const message = (text) => list.replaceChildren(el("p", { class: "chart-message" }, text));
+
+  // The response holds every user's rhythm; only the selected user's is rendered.
+  function show() {
+    const userId = getUserId();
+    if (userId === null || userId === undefined) return message("Select a user to see your personality.");
+    if (!latest) return; // keep the loading or offline message until data arrives
+    const mine = latest.series.find((series) => series.user_id === userId);
+    if (mine) list.replaceChildren(rhythmCard(mine));
+    else message("Personality unavailable for this user.");
+  }
+
+  async function refresh() {
+    const seq = ++sequence;
+    if (getUserId() === null || getUserId() === undefined) return show();
+    try {
+      const data = await getFocusStats({ period: "day", date: getToday() });
+      if (seq !== sequence) return;
+      latest = data;
+      show();
+    } catch (error) {
+      if (seq !== sequence) return;
+      message(error instanceof ApiError && error.isNetwork
+        ? "Cannot reach the server. Personality will return after reconnecting."
+        : `Could not load personality: ${error.message}`);
+    }
+  }
+
+  function setOffline() {
+    sequence += 1;
+    latest = null;
+    message("Cannot reach the server. Personality will return after reconnecting.");
+  }
+
+  return { refresh, show, setOffline };
 }

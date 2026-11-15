@@ -13,6 +13,7 @@ import {
 } from "./api.js";
 import { createLeaderboard } from "./leaderboard.js";
 import { createFocusChart } from "./focus-chart.js";
+import { createFocusRhythm } from "./focus-rhythm.js";
 import { PomodoroTimer, State, Mode } from "./timer.js";
 import { SilentNotifications } from "./notifications.js";
 import { ScreenLockDetector } from "./screen-lock.js";
@@ -256,6 +257,7 @@ ui.userSelect.addEventListener("change", () => {
   selectUser(Number(ui.userSelect.value));
   refreshStats();
   leaderboard.refresh();
+  focusRhythm.show();
 });
 
 // --- Personal stats ----------------------------------------------------------
@@ -331,6 +333,7 @@ function setConnection(online) {
     ui.statScreenSync.textContent = "Server unavailable";
     leaderboard.setOffline();
     focusChart.setOffline();
+    focusRhythm.setOffline();
   }
 }
 
@@ -344,6 +347,7 @@ async function syncAndRefresh() {
   refreshStats();
   leaderboard.refresh();
   focusChart.refresh();
+  focusRhythm.refresh();
 }
 
 async function refreshAll() {
@@ -363,6 +367,7 @@ const leaderboard = createLeaderboard({
   getCurrentUserId: () => app.userId,
 });
 const focusChart = createFocusChart({ root: $("focus-chart") });
+const focusRhythm = createFocusRhythm({ root: $("focus-rhythm"), getUserId: () => app.userId });
 
 (async function init() {
   renderNotificationControls();
