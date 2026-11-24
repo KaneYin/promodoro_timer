@@ -67,12 +67,12 @@ One row per completed Pomodoro or stopped/capped count-up session. Discarded ses
 |---|---|
 | `id` | UUID made by the browser. This is the idempotency key. |
 | `started_at_utc` | When the user first pressed Start. |
-| `completed_at_utc` | When the Pomodoro completed, count-up was stopped, or its 2-hour cap was reached. Decides the local day/week/month. |
+| `completed_at_utc` | When the Pomodoro completed, count-up was stopped, or its 2-hour cap was reached. Determines the date for session history and completion counts. |
 | `focus_seconds` | Time actually spent focusing, pauses excluded. |
 | `target_seconds` | Planned Pomodoro length (1500 by default), or 7200 for count-up. |
 | `mode` | `pomodoro` by default, or `countup`. Count-up duration may be less than its target. |
 
-Index `idx_focus_sessions_user_completed (user_id, completed_at_utc)` supports both the history query and the leaderboard sum.
+Index `idx_focus_sessions_user_completed (user_id, completed_at_utc)` supports history queries and completion counts.
 
 ### screen_usage_daily
 One row per (device, local day). The value is a **cumulative snapshot** and is overwritten, never added to.
@@ -96,7 +96,7 @@ Parse them with `datetime.fromisoformat`; the whole-second helper does not parse
 **Calendar dates** (`usage_date`) are plain `YYYY-MM-DD` text in the leaderboard timezone.
 
 **Period windows** are half-open `[start, end)`.
-- For `focus_sessions`, convert local midnights to UTC instants (`app/periods.py`) and compare against `completed_at_utc`.
+- For history and completion counts, compare local midnight boundaries converted to UTC against `completed_at_utc`. For duration totals, intersect each active interval with the UTC boundaries.
 - For `screen_usage_daily`, compare dates directly: `usage_date >= start_date AND usage_date < end_date_exclusive`.
 
 **Missing is not zero.** The leaderboard must distinguish "no row" (`no_data`) from `active_seconds = 0`.

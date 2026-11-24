@@ -11,13 +11,13 @@ router = APIRouter(prefix="/api", tags=["focus statistics"])
 
 @router.get("/focus-stats/dates", response_model=FocusDatesOut)
 def focus_dates(db: Db):
-    """Recorded completion dates across both users, newest first."""
+    """Recorded active focus dates across both users, newest first."""
     return get_focus_dates(db)
 
 
 @router.get("/focus-stats", response_model=FocusStatsOut)
 def focus_stats(db: Db, period: Period = "day", date: date_type | None = None):
-    """Both users' completed Focus durations in hourly/daily/weekly buckets.
+    """Both users' active focus durations in hourly/daily/weekly buckets.
 
     Independent of the user selected in the browser, just like leaderboards.
     """

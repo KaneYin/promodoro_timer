@@ -49,8 +49,8 @@ remaining = targetMs - elapsed
 - **Resume** sets `segmentStartMs = now`.
 - **Screen lock auto-pause / resume**: The browser reads physical screen lock status via the Idle Detection API (`screenState` in `IdleDetector`). When the OS locks the screen (`screenState === "locked"`), active focus sessions in both Pomodoro and Count-up modes are automatically paused so locked screen time is not accumulated. When unlocked (`screenState === "unlocked"`), the session resumes automatically. In Count-up mode, Stop & save continues to be available while paused by lock, and saving accurately excludes all locked screen duration. Manual user pauses are preserved and will not be auto-resumed on screen unlock.
 - `setInterval(250 ms)` only redraws. Background tabs may throttle it, and `visibilitychange` recomputes on return.
-- **Completion time** is `segmentStart + remaining-at-segment-start`, not "now". If the page was closed past the end, the session is still recorded with the true end time. The break is then measured from that moment, so a very late reopen lands in IDLE.
-- Pomodoro's `focus_seconds` equals the target. Count-up uses actual elapsed whole seconds (1..7200), with target 7200. Both use the completion date in America/Chicago.
+- **Completion time** is `segmentStart + remaining-at-segment-start`, not "now". Before evaluating that deadline, focus checks its last durable running checkpoint (written at most once every five seconds). A gap of at least 75 seconds pauses at the checkpoint so unobserved focus is excluded. The user presses Resume to start another segment. Detected screen locks still resume on unlock. Breaks continue against the wall clock.
+- Pomodoro's `focus_seconds` equals the target. Count-up uses actual elapsed whole seconds (1..7200), with target 7200. Both contribute duration to their active intervals in America/Chicago, while session counts use the completion date.
 - Manual count-up stops persist a COMPLETED boundary before the outbox write so retries retain exactly the same duration and completion time.
 - The session keeps the `user_id` of whoever pressed Start. The user selector is locked during FOCUSING/PAUSED.
 
@@ -101,12 +101,13 @@ Retry triggers: right after completion, every 60 s, on the browser `online` even
 |---|---|
 | User dropdown | `GET /api/users` |
 | Connection pill | `GET /api/health` every 30 s |
-| Sessions today, Focus today | `GET /api/focus-sessions?user_id=&start_date=today&end_date=today` |
+| Sessions today | `GET /api/focus-sessions?user_id=&start_date=today&end_date=today` |
+| Focus today | `GET /api/leaderboards?metric=focus&period=day&date=today` |
 | Focus this week | `GET /api/leaderboards?metric=focus&period=week` (the user's entry) |
 | Screen time today and last sync | `GET /api/leaderboards?metric=screen&period=day` (the user's entry) |
 | Leaderboard panel | `GET /api/leaderboards?metric=…&period=…&order=…` |
 | Shared Focus chart | `GET /api/focus-stats?period=…&date=…` (always both users; no user filter) |
-| Chart history options | `GET /api/focus-stats/dates` (completion and rhythm dates across both users) |
+| Chart history options | `GET /api/focus-stats/dates` (dates touched by active intervals and legacy estimates across both users) |
 | Focus personality icons and Details | `entries[].rhythm` from the leaderboard response; shares the chart's period/history selection |
 
 Statistics and leaderboards refresh every 60 s, on tab visibility recovery, and after a session sync. Health is also checked every 30 s. A failed initial user request is retried after a successful health check until the list loads.

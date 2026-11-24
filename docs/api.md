@@ -81,7 +81,7 @@ Both modes require the completion timestamp after the start, a wall-clock span a
 
 New clients may send `active_segments`: 1–10000 objects with timezone-aware `started_at_utc` and `ended_at_utc`, preserving fractional seconds. Intervals must be positive, ordered, non-overlapping, and within session boundaries (the discarded completion fraction is allowed). Their combined whole-second duration must equal `focus_seconds`; invalid intervals return 422 with `invalid_active_segments`. Segment content also participates in retry comparisons (409 on change). Omitted/null intervals preserve legacy compatibility. See [Focus Rhythm](focus-rhythm.md).
 
-Example count-up payload: use `mode: "countup"`, `target_seconds: 7200`, `focus_seconds: 600`, and timestamps spanning at least 600 seconds. It adds one session and 600 seconds to the completion day's Focus total; pauses are excluded from the supplied duration.
+Example count-up payload: use `mode: "countup"`, `target_seconds: 7200`, `focus_seconds: 600`, and timestamps spanning at least 600 seconds. It adds one completed session and allocates 600 seconds to the local time buckets containing its active intervals.
 
 The browser retries this call until it gets a 2xx or a permanent 4xx, so every rule above must be safe to hit twice.
 
@@ -123,16 +123,16 @@ Shared chart data for **all users**; it does not filter by the selected browser 
 | `period` | no | `day` (default), `week`, `month` |
 | `date` | no | Local date inside the period; defaults to today in America/Chicago |
 
-The response includes `period`, `period_start`, `period_end_exclusive`, `timezone`, `generated_at_utc`, `bucket_unit` and `attribution: "completion"`, plus:
+The response includes `period`, `period_start`, `period_end_exclusive`, `timezone`, `generated_at_utc`, `bucket_unit` and `attribution: "active_intervals"`, plus:
 
 - `buckets`: ordered objects with `label`, `start_utc`, `end_utc`.
-- `series`: ordered by user id, each with `user_id`, `display_name`, `duration_seconds` (one value per bucket), `total_seconds`, `session_count`. Users with no sessions have zero values, not missing series.
+- `series`: ordered by user id, each with `user_id`, `display_name`, `duration_seconds` (one value per bucket), `total_seconds`, `session_count` (completions within the period). Users with no sessions have zero values, not missing series.
 
 Daily charts group by actual UTC hours converted to the leaderboard timezone: 23/24/25 bins depending on DST. Repeated fall-back hours have distinct CDT/CST labels. Weekly charts contain Monday through Sunday. Monthly charts use Monday-aligned weeks clipped at the first/last day of that month.
 
-**Chart attribution:** each entire session belongs to its completion bucket, matching Focus rankings. A session completed at 10:05 contributes its recorded duration to the 10:00 hour, even if it began earlier. Both Pomodoro and count-up sessions contribute; pauses/breaks are excluded from recorded duration. Summing a chart series always gives that user's Focus total for the same leaderboard window.
+**Chart attribution:** both modes split recorded focus across the time buckets intersecting each active interval. Legacy records without intervals distribute recorded focus seconds uniformly across the session span. Whole seconds are allocated cumulatively per session, so a bucket gets the same credit when queried alone or as part of a longer period. A chart series adds up to the user's Focus ranking total for the same window.
 
-**Focus Rhythm:** each series additionally contains `rhythm`, computed from active intervals clipped to the requested period. Includes `key`, `label`, `emoji`, `total_seconds`, `active_days`, `minimum_seconds`, `minimum_days`, `estimated_seconds`, and six `windows` (key/label/emoji/time_range/duration_seconds/share). Rhythm totals may differ from completion-based chart totals. See [definitions and examples](focus-rhythm.md).
+**Focus Rhythm:** each series additionally contains `rhythm`, computed from active intervals clipped to the requested period. Includes `key`, `label`, `emoji`, `total_seconds`, `active_days`, `minimum_seconds`, `minimum_days`, `estimated_seconds`, and six `windows` (key/label/emoji/time_range/duration_seconds/share). Rhythm totals retain fractional seconds for classification. See [definitions and examples](focus-rhythm.md).
 
 The same model is also included as `entries[].rhythm` in `GET /api/leaderboards`, for the leaderboard's requested `period` and `date`, with both metrics. This always describes focus time, even when ranking Screen Time. Ranking duration, freshness and eligibility rules are unchanged.
 
@@ -140,13 +140,13 @@ Invalid period/date or unsupported calendar bounds return 422. Database failures
 
 ### GET `/api/focus-stats/dates`
 
-Returns distinct recorded dates for **both users**, newest first. Includes completion dates and dates touched by active intervals (or legacy timing estimates), so the rhythm of a session's preceding day is accessible:
+Returns distinct recorded dates for **both users**, newest first. Includes dates touched by active intervals or legacy timing estimates, including any day before a session's completion:
 
 ```json
 {"timezone": "America/Chicago", "dates": ["2026-11-13", "2026-11-11"]}
 ```
 
-The list is empty when no sessions have been recorded. Dates are converted with the chart's timezone before SQL deduplication, including DST; SQLite's host-local timezone is not used. The frontend groups these dates into available weeks/months. Its default current-period option is always present, even with no records. Database failures return 503.
+The list is empty when no sessions have been recorded. Dates are converted with the chart's timezone, including DST. The frontend groups these dates into available weeks/months. Its default current-period option is always present, even with no records. Database failures return 503.
 
 ---
 

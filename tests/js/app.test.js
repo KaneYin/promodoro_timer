@@ -38,7 +38,7 @@ async function boot({usersAvailable=true, idleDetector=null}={}) {
       return {ok:true,json:async()=>statsFixture(url.searchParams.get("period"))};
     }
     if(url.pathname==="/api/leaderboards")leaderboardRequests.push(url);
-    const data=url.pathname==="/api/users"?[{id:1,display_name:"Yinkun"},{id:2,display_name:"Ruiping"}]:url.pathname==="/api/health"?{status:"ok"}:url.pathname==="/api/focus-sessions"?[{focus_seconds:1500}]:{metric:url.searchParams.get("metric"),period_start:"2026-11-11",period_end_exclusive:"2026-11-12",timezone:"America/Chicago",entries:[{user_id:1,display_name:"Yinkun",duration_seconds:1500,rank:1,data_status:"available",days_with_data:1,days_expected:1}]};
+    const data=url.pathname==="/api/users"?[{id:1,display_name:"Yinkun"},{id:2,display_name:"Ruiping"}]:url.pathname==="/api/health"?{status:"ok"}:url.pathname==="/api/focus-sessions"?[{focus_seconds:60}]:{metric:url.searchParams.get("metric"),period_start:"2026-11-11",period_end_exclusive:"2026-11-12",timezone:"America/Chicago",entries:[{user_id:1,display_name:"Yinkun",duration_seconds:1500,rank:1,data_status:"available",days_with_data:1,days_expected:1}]};
     if(url.pathname==="/api/leaderboards") {
       const period=url.searchParams.get("period");
       const key=period==="week"?"flexible":period==="month"?"discovering":url.searchParams.get("date")==="2026-11-13"?"night_owl":"early_bird";
@@ -75,6 +75,7 @@ test("disconnect clears statistics and old ranks",async()=>{
   const app=await boot();
   try{
     assert.equal(app.node("stat-today").textContent,"25m");
+    assert.equal(app.node("stat-count").textContent,"1");
     assert.equal(app.node("lb-list").children[0].className,"lb-entry me first");
     app.setOnline(false);app.events.offline();
     await app.intervals.find(i=>i.ms===60000).fn();await app.settle();

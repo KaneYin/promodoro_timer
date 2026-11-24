@@ -2,7 +2,7 @@
 //
 // Design rules (docs/frontend-backend.md, "Timer"):
 //  - Time is always derived from wall-clock timestamps, never from counting setInterval ticks.
-//  - Everything needed to resume is persisted, so a reload or a throttled background tab loses nothing.
+//  - Persist active segments and the last live checkpoint across reloads.
 //  - Finishing a focus phase hands the session to `persistCompletedSession` BEFORE the new state
 //    is saved. A crash in between only replays the same session id, which the server de-duplicates.
 
@@ -21,6 +21,9 @@ export const DEFAULT_BREAK_MS = 5 * 60 * 1000;
 export const COUNTUP_MAX_MS = 2 * 60 * 60 * 1000;
 export const Mode = Object.freeze({ POMODORO: "pomodoro", COUNTUP: "countup" });
 const STORAGE_KEY = "focusTracker.timer.v1";
+const CHECKPOINT_MS = 5_000;
+// Chromium may run background timers only once a minute. Leave headroom.
+const INTERRUPTION_GAP_MS = 75_000;
 
 const idleState = (mode = Mode.POMODORO) => ({
   state: State.IDLE,
@@ -31,6 +34,7 @@ const idleState = (mode = Mode.POMODORO) => ({
   targetMs: 0, // length of the current phase
   accumulatedMs: 0, // running time banked before the current segment (pauses)
   segmentStartMs: null, // start of the current running segment; null while paused/idle
+  lastRunningAtMs: null, // durable checkpoint for detecting missed execution
   completedAtMs: null, // freezes a manual stop's timestamp before any network retry
   pausedByLock: false,
   activeSegments: [], // closed [startMs, endMs] pairs; null for an upgraded legacy session
@@ -80,6 +84,7 @@ export class PomodoroTimer {
       targetMs: this.data.mode === Mode.COUNTUP ? COUNTUP_MAX_MS : this.focusMs,
       accumulatedMs: 0,
       segmentStartMs: t,
+      lastRunningAtMs: t,
       completedAtMs: null,
       pausedByLock: false,
       activeSegments: [],
@@ -98,7 +103,8 @@ export class PomodoroTimer {
    * under the same UUID. Subsecond sessions remain running and are never saved.
    */
   stop() {
-    if (this.#advance() || this.data.mode !== Mode.COUNTUP || ![State.FOCUSING, State.PAUSED].includes(this.data.state)) return;
+    this.#advance();
+    if (this.data.mode !== Mode.COUNTUP || ![State.FOCUSING, State.PAUSED].includes(this.data.state)) return;
     const stoppedAtMs = this.now();
     const elapsed = Math.min(this.elapsedMs(stoppedAtMs), COUNTUP_MAX_MS);
     if (elapsed < 1000) return;
@@ -110,13 +116,7 @@ export class PomodoroTimer {
   /** FOCUSING -> PAUSED. */
   pause({ byLock = false } = {}) {
     if (this.#advance() || this.data.state !== State.FOCUSING) return;
-    const pausedAtMs = this.now();
-    this.data.activeSegments = this.#closedSegments(pausedAtMs);
-    this.data.accumulatedMs = this.elapsedMs(pausedAtMs);
-    this.data.segmentStartMs = null;
-    this.data.state = State.PAUSED;
-    this.data.pausedByLock = Boolean(byLock);
-    this.#commit();
+    this.#pauseAt(this.now(), Boolean(byLock));
   }
 
   /** Convenience method for pausing due to screen lock. */
@@ -129,6 +129,7 @@ export class PomodoroTimer {
     if (this.data.state !== State.PAUSED) return;
     if (byUnlock && !this.data.pausedByLock) return;
     this.data.segmentStartMs = this.now();
+    this.data.lastRunningAtMs = this.data.segmentStartMs;
     this.data.state = State.FOCUSING;
     this.data.pausedByLock = false;
     this.#commit();
@@ -189,6 +190,16 @@ export class PomodoroTimer {
 
   // --- Internals ----------------------------------------------------------
 
+  #pauseAt(endMs, byLock) {
+    this.data.activeSegments = this.#closedSegments(endMs);
+    this.data.accumulatedMs = this.elapsedMs(endMs);
+    this.data.segmentStartMs = null;
+    this.data.lastRunningAtMs = null;
+    this.data.state = State.PAUSED;
+    this.data.pausedByLock = byLock;
+    this.#commit();
+  }
+
   #closedSegments(endMs) {
     const d = this.data;
     if (d.activeSegments === null) return null;
@@ -197,7 +208,7 @@ export class PomodoroTimer {
 
   /**
    * Apply every phase transition that the clock says has already happened
-   * (a tab may have been asleep for hours). Returns true if anything changed.
+   * after reconciling an interrupted focus segment. Returns true on a transition.
    */
   #advance() {
     let changed = false;
@@ -208,7 +219,21 @@ export class PomodoroTimer {
         changed = true;
         continue;
       }
-      if (d.segmentStartMs === null || this.elapsedMs() < d.targetMs) break;
+      if (d.segmentStartMs === null) break;
+      const now = this.now();
+      if (d.state === State.FOCUSING && d.lastRunningAtMs !== null
+          && (now - d.lastRunningAtMs >= INTERRUPTION_GAP_MS || now < d.lastRunningAtMs)) {
+        this.#pauseAt(d.lastRunningAtMs, false);
+        return true;
+      }
+      if (this.elapsedMs(now) < d.targetMs) {
+        if (d.state === State.FOCUSING
+            && (d.lastRunningAtMs === null || now - d.lastRunningAtMs >= CHECKPOINT_MS)) {
+          d.lastRunningAtMs = now;
+          this.#commit({ silent: true });
+        }
+        break;
+      }
 
       // The phase ended at segmentStart + remaining-at-segment-start, not "now".
       const endedAtMs = d.segmentStartMs + (d.targetMs - d.accumulatedMs);

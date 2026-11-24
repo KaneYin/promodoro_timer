@@ -22,7 +22,7 @@ flowchart LR
 - All calendar dates use `America/Chicago`, including both agents, regardless of the machine's system timezone.
 - Stored instants are aware UTC, normalized to fixed-width whole-second strings.
 - Day/week/month windows are half-open. Weeks begin Monday. Local midnight conversion handles DST independently at both boundaries.
-- Focus is assigned to its completion date. Pauses and breaks are excluded; cancelled sessions are never saved.
+- Focus duration is assigned to the local dates touched by each active interval. Session counts use the completion date. Pauses and breaks are excluded; cancelled sessions are never saved.
 - A Focus UUID identifies immutable content. Equal retries succeed, changed content conflicts, and competing writes are serialized.
 - Screen Time is a cumulative snapshot per device/date. Newer collections replace; older/equal collections do not refresh server receipt time.
 
@@ -47,9 +47,9 @@ Coverage means recorded dates, not continuous observation. The system cannot pro
 
 ## Browser resilience
 
-The shared Focus chart lives below personal stats and always requests both users, independently of the selected user. User-id-based colors remain fixed. Day/week/month views group sessions by completion hour/day/week respectively, using the same timezone and whole-session attribution as Focus rankings. Monthly weeks start Monday and are clipped to month bounds; daily DST bins represent real hours, so repeated local hours stay distinct. Date navigation is local to the chart. Bar selection exposes both durations, with a data table as an accessible alternative.
+The shared Focus chart lives below personal stats and always requests both users, independently of the selected user. User-id-based colors remain fixed. Day/week/month views split active intervals into hours/days/weeks respectively, using the same timezone and allocation as Focus rankings. Monthly weeks start Monday and are clipped to month bounds; daily DST bins represent real hours, so repeated local hours stay distinct. Date navigation is local to the chart. Bar selection exposes both durations, with a data table as an accessible alternative.
 
-Each chart period total equals the corresponding user's Focus leaderboard total. The stored data has no active-segment timeline; completion-hour grouping deliberately avoids treating paused wall-clock intervals as focused activity. Empty bins are zero; failed requests and offline state show an unavailable message rather than stale totals. Request sequencing prevents an older date/period reply from replacing a newer selection.
+Each chart period total equals the corresponding user's Focus leaderboard total. When historical records lack timing intervals, their focus seconds are spread uniformly across their recorded start-to-completion span. Empty bins are zero; failed requests and offline state show an unavailable message rather than stale totals. Request sequencing prevents an older date/period reply from replacing a newer selection.
 
 The timer uses persisted wall-clock timestamps, so throttling and reloads do not lose elapsed time. Sleep counts as focus; a late reopen records the original deadline and skips an already elapsed break. Starting another Focus requires a deliberate Start.
 

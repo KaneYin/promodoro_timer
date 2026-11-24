@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS focus_sessions (
     CHECK (target_seconds > 0)
 );
 
--- Serves "sessions of user X completed in [start, end)" (history + leaderboard).
+-- Serves "sessions of user X completed in [start, end)" (history and session counts).
 CREATE INDEX IF NOT EXISTS idx_focus_sessions_user_completed
     ON focus_sessions (user_id, completed_at_utc);
 

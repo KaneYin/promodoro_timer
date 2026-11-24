@@ -25,7 +25,7 @@ test("grouped bars and legend use stable user colors and both totals",async()=>{
   assert.match(contents(x.node("chart-legend")),/Yinkun.*25m 30s.*Ruiping.*30m/);
   bars[0].events.click();
   assert.match(x.node("chart-detail").textContent,/09:00 CST: Yinkun 25m · Ruiping 10m/);
-  assert.match(contents(x.node("chart-table")),/Completed.*Yinkun.*Ruiping/);
+  assert.match(contents(x.node("chart-table")),/Interval.*Yinkun.*Ruiping/);
 });
 
 test("browser date is the default and SQL-backed periods need no manual date input",async()=>{
@@ -77,7 +77,7 @@ test("older replies cannot overwrite a newer period selection",async()=>{
   resolvers[1]();await x.settle();
   resolvers[0]();await old;
   assert.equal(x.node("chart-month").getAttribute("aria-pressed"),"true");
-  assert.match(contents(x.node("chart-plot")),/Completion week/);
+  assert.match(contents(x.node("chart-plot")),/Focus by week/);
 });
 
 test("recorded weeks/months are deduplicated, with an empty current period always available",()=>{

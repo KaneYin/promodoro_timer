@@ -48,9 +48,10 @@ Weekly/monthly labels aggregate original focus seconds, never daily-label votes.
 
 New timer sessions submit optional `active_segments` containing timezone-aware
 `started_at_utc` / `ended_at_utc` pairs, with fractional seconds preserved.
-Manual pause and screen lock close the current interval; resuming opens another.
-Stop-and-save freezes intervals before the durable outbox write. Reloads, caps,
-late reopening and outbox retries keep the same intervals and UUID. Cancelled
+Manual pause and detected screen lock close the current interval. After a long
+browser interruption, the timer closes it at the last running checkpoint.
+Resuming opens another interval. Stop-and-save freezes intervals before the
+durable outbox write. Caps and outbox retries keep the same intervals and UUID. Cancelled
 sessions and breaks contribute nothing. A session already running during an
 upgrade retains legacy attribution rather than inventing past pause times.
 
@@ -70,10 +71,9 @@ the original focus duration but cannot reconstruct historical pauses.
 Intervals are split at window boundaries and local midnight, clipped to the
 selected day/week/month. A 23:30–00:30 session contributes 30 minutes to each
 day, all as Night Owl. UTC stepping handles Chicago's 23/25-hour DST dates.
-The history menu includes dates touched by intervals/legacy estimates, as well
-as completion dates, so preceding dates remain selectable.
+The history menu includes dates touched by intervals or legacy estimates, including days before completion.
 
-## API and existing chart totals
+## API and chart totals
 
 `GET /api/focus-stats` adds `series[].rhythm` with:
 
@@ -88,9 +88,7 @@ for its requested `period` and `date`. Attaching it to the same response prevent
 an icon from being paired with a ranking for a different window. Classification
 and stored data are unchanged by the compact presentation.
 
-The existing bars, personal stats and rankings retain completion attribution.
-Their totals can differ from the interval-based rhythm totals at calendar
-boundaries. The page explains this distinction. No existing ranking rule changes.
+Bars, personal focus durations and Focus rankings use the same intervals and legacy estimates. They allocate whole seconds cumulatively for consistent totals across calendar periods. Rhythm retains fractional proportions for classification.
 
 ## Verification
 

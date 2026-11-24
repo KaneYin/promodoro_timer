@@ -80,9 +80,9 @@ class FocusRhythmTests(unittest.TestCase):
             self.assertEqual((self.rhythm(day).key, self.rhythm(day).total_seconds), ("night_owl",1800))
         self.assertEqual(self.rhythm("2026-11-30","month").total_seconds,1800)
         self.assertEqual(self.rhythm("2026-12-01","month").total_seconds,1800)
-        # The existing chart keeps completion attribution while rhythm splits.
+        # The chart and rhythm both credit the time before midnight.
         chart = get_focus_stats(self.conn,"day",date(2026,11,30)).series[0]
-        self.assertEqual(chart.total_seconds,0)
+        self.assertEqual(chart.total_seconds,1800)
         self.assertEqual(chart.rhythm.total_seconds,1800)
         self.assertEqual(get_focus_dates(self.conn).dates,[date(2026,12,1),date(2026,11,30)])
 

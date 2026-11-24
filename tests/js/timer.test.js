@@ -8,7 +8,7 @@ test("active intervals exclude manual and lock pauses, survive reload, and stop 
   timer.start(1);advance(10500);timer.pause();advance(60000);
   timer.resume();advance(20250);timer.pauseByScreenLock();advance(120000);
   const restored=new PomodoroTimer(options);
-  restored.resumeByScreenUnlock();advance(3600000);restored.tick();
+  restored.resumeByScreenUnlock();advance(30000);restored.tick();
   assert.deepEqual(sessions[0].active_segments,[
     {started_at_utc:"2026-11-11T15:00:00.000Z",ended_at_utc:"2026-11-11T15:00:10.500Z"},
     {started_at_utc:"2026-11-11T15:01:10.500Z",ended_at_utc:"2026-11-11T15:01:30.750Z"},
@@ -62,15 +62,27 @@ test("pause excludes idle time, completion uses exact deadline and breaks are no
   assert.equal(sessions.length,1);
 });
 
-test("late reopen preserves original user and deadline, without inventing more sessions",()=>{
-  const {timer,options,sessions,advance}=setup();
-  timer.start(2); advance(3600000);
-  const reopened=new PomodoroTimer(options);
-  assert.equal(reopened.snapshot().state,"IDLE");
-  assert.equal(sessions.length,1);
-  assert.equal(sessions[0].user_id,2);
-  assert.equal(sessions[0].completed_at_utc,"2026-11-11T15:01:00Z");
-  reopened.tick(); assert.equal(sessions.length,1);
+test("a long interruption closes the focus interval at the last durable checkpoint", () => {
+  const { timer, options, sessions, advance } = setup();
+  timer.start(2);
+  advance(20000);
+  timer.tick();
+  advance(3600000);
+  const reopened = new PomodoroTimer(options);
+  assert.equal(reopened.snapshot().state, "PAUSED");
+  assert.equal(reopened.snapshot().remainingMs, 40000);
+  assert.equal(sessions.length, 0);
+  reopened.resumeByScreenUnlock();
+  assert.equal(reopened.snapshot().state, "PAUSED");
+  reopened.resume();
+  advance(40000);
+  reopened.tick();
+  assert.equal(sessions[0].user_id, 2);
+  assert.equal(sessions[0].completed_at_utc, "2026-11-11T16:01:00Z");
+  assert.deepEqual(sessions[0].active_segments, [
+    { started_at_utc: "2026-11-11T15:00:00.000Z", ended_at_utc: "2026-11-11T15:00:20.000Z" },
+    { started_at_utc: "2026-11-11T16:00:20.000Z", ended_at_utc: "2026-11-11T16:01:00.000Z" },
+  ]);
 });
 
 test("cancel produces no session",()=>{
@@ -124,16 +136,33 @@ test("count-up pause excludes paused time and Stop works while paused",()=>{
   assert.equal(sessions[0].completed_at_utc,"2026-11-11T15:01:05Z");
 });
 
-test("count-up cap saves exactly two hours even on a much later reopen",()=>{
-  const {timer,options,sessions,advance}=setup();
-  timer.setMode(Mode.COUNTUP); timer.start(1);
-  advance(COUNTUP_MAX_MS+3600000);
-  const reopened=new PomodoroTimer(options);
-  assert.equal(sessions.length,1);
-  assert.equal(sessions[0].focus_seconds,7200);
-  assert.equal(sessions[0].completed_at_utc,"2026-11-11T17:00:00Z");
-  assert.equal(reopened.snapshot().state,"IDLE");
-  reopened.tick(); assert.equal(sessions.length,1);
+test("count-up can save right after an interruption without crediting it", () => {
+  const { timer, sessions, advance } = setup();
+  timer.setMode(Mode.COUNTUP);
+  timer.start(1);
+  advance(12345);
+  timer.tick();
+  advance(90_000);
+  timer.stop();
+  assert.equal(sessions[0].focus_seconds, 12);
+  assert.deepEqual(sessions[0].active_segments, [
+    { started_at_utc: "2026-11-11T15:00:00.000Z", ended_at_utc: "2026-11-11T15:00:12.345Z" },
+  ]);
+});
+
+test("count-up cap saves exactly two hours with sparse background ticks", () => {
+  const { timer, options, sessions, advance } = setup();
+  timer.setMode(Mode.COUNTUP);
+  timer.start(1);
+  for (let elapsed = 0; elapsed < COUNTUP_MAX_MS; elapsed += 60_000) {
+    advance(60_000);
+    timer.tick();
+  }
+  const reopened = new PomodoroTimer(options);
+  assert.equal(sessions.length, 1);
+  assert.equal(sessions[0].focus_seconds, 7200);
+  assert.equal(sessions[0].completed_at_utc, "2026-11-11T17:00:00Z");
+  assert.equal(reopened.snapshot().state, "IDLE");
 });
 
 test("count-up resumes from storage, rejects subsecond saves and supports discard",()=>{

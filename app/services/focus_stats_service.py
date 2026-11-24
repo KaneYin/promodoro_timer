@@ -1,12 +1,7 @@
-"""Shared chart data, using exactly the completion-date policy of Focus rankings.
-
-Chart bars retain completion attribution. Rhythm cards separately split active
-intervals (or disclosed legacy estimates), so calendar-boundary totals may differ.
-"""
+"""Shared chart totals by active interval and local calendar bucket."""
 
 import sqlite3
-from bisect import bisect_right
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from app import config
 from app.periods import PeriodWindow, local_midnight_utc, resolve_window, today_local
@@ -17,42 +12,31 @@ from app.schemas import (
     FocusStatsSeries,
     Period,
 )
-from app.timeutil import parse_utc_iso, to_utc_iso, utc_now_iso
+from app.services.focus_intervals import load_focus_intervals
 from app.services.focus_rhythm_service import get_focus_rhythms
+from app.timeutil import parse_utc_iso, to_utc_iso, utc_now_iso
 
 WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
 
 def get_focus_dates(conn: sqlite3.Connection) -> FocusDatesOut:
-    # SQLite's localtime modifier follows the host timezone, not our chart zone.
-    # Convert each completion with ZoneInfo, then deduplicate dates in SQL.
-    conn.create_function(
-        "focus_local_date",
-        1,
-        lambda value: (
-            parse_utc_iso(value).astimezone(config.LEADERBOARD_TZ).date().isoformat()
-        ),
-        deterministic=True,
+    dates = set()
+    for session in load_focus_intervals(conn):
+        for started, ended in session.segments:
+            start = started.astimezone(config.LEADERBOARD_TZ).date()
+            last = (
+                (ended - timedelta(microseconds=1))
+                .astimezone(config.LEADERBOARD_TZ)
+                .date()
+            )
+            while start <= last:
+                dates.add(start)
+                if start == last:
+                    break
+                start += timedelta(days=1)
+    return FocusDatesOut(
+        timezone=config.LEADERBOARD_TZ_NAME, dates=sorted(dates, reverse=True)
     )
-    rows = conn.execute(
-        """SELECT DISTINCT focus_local_date(completed_at_utc) AS day
-           FROM focus_sessions ORDER BY day DESC"""
-    ).fetchall()
-    dates = {date.fromisoformat(row["day"]) for row in rows}
-    # Rhythm can include the day before completion. Keep these days reachable
-    # from the shared history menu, including segment-free legacy estimates.
-    intervals = conn.execute(
-        """SELECT COALESCE(s.started_at_utc, f.started_at_utc) AS start,
-                  COALESCE(s.ended_at_utc, f.completed_at_utc) AS end
-           FROM focus_sessions f LEFT JOIN focus_session_segments s ON s.session_id = f.id"""
-    )
-    for interval in intervals:
-        start = datetime.fromisoformat(interval["start"]).astimezone(config.LEADERBOARD_TZ).date()
-        last = (datetime.fromisoformat(interval["end"]) - timedelta(microseconds=1)).astimezone(config.LEADERBOARD_TZ).date()
-        while start <= last:
-            dates.add(start)
-            start += timedelta(days=1)
-    return FocusDatesOut(timezone=config.LEADERBOARD_TZ_NAME, dates=sorted(dates, reverse=True))
 
 
 def chart_buckets(window: PeriodWindow) -> list[FocusStatsBucket]:
@@ -107,33 +91,32 @@ def get_focus_stats(
 ) -> FocusStatsOut:
     window = resolve_window(period, anchor or today_local())
     buckets = chart_buckets(window)
-    starts = [bucket.start_utc for bucket in buckets]
-    # One SELECT gives both users a consistent snapshot. Filters in ON preserve
-    # users with zero sessions; existing (user_id, completed_at_utc) index applies.
+    boundaries = [parse_utc_iso(bucket.start_utc) for bucket in buckets] + [
+        window.end_utc
+    ]
+    # Session counts still record how many sessions were completed in the period.
     rows = conn.execute(
-        """SELECT u.id, u.display_name, f.completed_at_utc, f.focus_seconds
+        """SELECT u.id, u.display_name, COUNT(f.id) AS session_count
            FROM users u LEFT JOIN focus_sessions f ON f.user_id = u.id
              AND f.completed_at_utc >= ? AND f.completed_at_utc < ?
-           ORDER BY u.id, f.completed_at_utc""",
+           GROUP BY u.id ORDER BY u.id""",
         (to_utc_iso(window.start_utc), to_utc_iso(window.end_utc)),
-    ).fetchall()
-    series = {}
-    for row in rows:
-        item = series.setdefault(
-            row["id"],
-            FocusStatsSeries(
-                user_id=row["id"],
-                display_name=row["display_name"],
-                duration_seconds=[0] * len(buckets),
-                total_seconds=0,
-                session_count=0,
-            ),
+    )
+    series = {
+        row["id"]: FocusStatsSeries(
+            user_id=row["id"],
+            display_name=row["display_name"],
+            duration_seconds=[0] * len(buckets),
+            total_seconds=0,
+            session_count=row["session_count"],
         )
-        if row["completed_at_utc"] is not None:
-            index = bisect_right(starts, row["completed_at_utc"]) - 1
-            item.duration_seconds[index] += row["focus_seconds"]
-            item.total_seconds += row["focus_seconds"]
-            item.session_count += 1
+        for row in rows
+    }
+    for session in load_focus_intervals(conn, window.start_utc, window.end_utc):
+        item = series[session.user_id]
+        for index, seconds in enumerate(session.bucket_seconds(boundaries)):
+            item.duration_seconds[index] += seconds
+            item.total_seconds += seconds
     rhythms = get_focus_rhythms(conn, window)
     for user_id, item in series.items():
         item.rhythm = rhythms[user_id]

@@ -6,8 +6,9 @@ from datetime import date, datetime, timedelta
 from app import config
 from app.periods import PeriodWindow, resolve_window, today_local
 from app.schemas import LeaderboardEntry, LeaderboardOut, Metric, Order, Period
-from app.timeutil import parse_utc_iso, to_utc_iso, utc_now
+from app.services.focus_intervals import load_focus_intervals
 from app.services.focus_rhythm_service import get_focus_rhythms
+from app.timeutil import parse_utc_iso, to_utc_iso, utc_now
 
 
 def default_order(metric: Metric) -> Order:
@@ -50,19 +51,16 @@ def get_leaderboard(
 def focus_entries(
     conn: sqlite3.Connection, window: PeriodWindow
 ) -> list[LeaderboardEntry]:
-    """Time predicates belong in ON, preserving users without matching sessions."""
-    rows = conn.execute(
-        """SELECT u.id, u.display_name, COALESCE(SUM(f.focus_seconds), 0) AS seconds
-           FROM users u LEFT JOIN focus_sessions f ON f.user_id = u.id
-             AND f.completed_at_utc >= ? AND f.completed_at_utc < ?
-           GROUP BY u.id ORDER BY u.id""",
-        (to_utc_iso(window.start_utc), to_utc_iso(window.end_utc)),
-    ).fetchall()
+    totals: dict[int, int] = {}
+    for session in load_focus_intervals(conn, window.start_utc, window.end_utc):
+        (seconds,) = session.bucket_seconds([window.start_utc, window.end_utc])
+        totals[session.user_id] = totals.get(session.user_id, 0) + seconds
+    rows = conn.execute("SELECT id, display_name FROM users ORDER BY id")
     return [
         LeaderboardEntry(
             user_id=r["id"],
             display_name=r["display_name"],
-            duration_seconds=r["seconds"],
+            duration_seconds=totals.get(r["id"], 0),
             rank=None,
             data_status="available",
         )

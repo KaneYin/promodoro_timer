@@ -174,7 +174,7 @@ class FocusStatsOut(BaseModel):
     period_end_exclusive: date
     timezone: str
     bucket_unit: Literal["hour", "day", "week"]
-    attribution: Literal["completion"] = "completion"
+    attribution: Literal["active_intervals"] = "active_intervals"
     generated_at_utc: str
     buckets: list[FocusStatsBucket]
     series: list[FocusStatsSeries]

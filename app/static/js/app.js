@@ -268,8 +268,9 @@ async function refreshStats() {
   const userId = app.userId;
   const today = todayInTimezone(LEADERBOARD_TZ);
 
-  const [sessions, focusWeek, screenDay] = await Promise.allSettled([
+  const [sessions, focusDay, focusWeek, screenDay] = await Promise.allSettled([
     getFocusSessions({ userId, startDate: today, endDate: today }),
+    getLeaderboard({ metric: "focus", period: "day", date: today }),
     getLeaderboard({ metric: "focus", period: "week", date: today }),
     getLeaderboard({ metric: "screen", period: "day", date: today }),
   ]);
@@ -277,12 +278,9 @@ async function refreshStats() {
 
   const mine = (r) => (r.status === "fulfilled" ? r.value.entries.find((e) => e.user_id === userId) : undefined);
 
-  if (sessions.status === "fulfilled") {
-    ui.statCount.textContent = String(sessions.value.length);
-    ui.statToday.textContent = formatDuration(sessions.value.reduce((sum, s) => sum + s.focus_seconds, 0));
-  } else {
-    ui.statCount.textContent = ui.statToday.textContent = dash;
-  }
+  ui.statCount.textContent = sessions.status === "fulfilled" ? String(sessions.value.length) : dash;
+  const day = mine(focusDay);
+  ui.statToday.textContent = day ? formatDuration(day.duration_seconds) : dash;
 
   const week = mine(focusWeek);
   ui.statWeek.textContent = week ? formatDuration(week.duration_seconds) : dash;

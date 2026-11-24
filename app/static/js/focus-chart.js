@@ -1,5 +1,5 @@
 // Shared comparison chart: no current-user input, fixed colors by user id.
-// Each session is assigned to its completion bucket, matching Focus rankings.
+// Active focus time is split across buckets, matching Focus rankings.
 import { getFocusStats, getFocusDates, ApiError } from "./api.js";
 import { el, formatDateOnly, formatDuration, todayInTimezone } from "./util.js";
 
@@ -98,13 +98,13 @@ export function createFocusChart({ root, getToday = todayInTimezone, onSelection
     ui.legend.replaceChildren(...data.series.map((series) => el("div", { class: "chart-user" },
       el("span", { class: "chart-swatch", style: `background:${seriesColor(series.user_id)}`, "aria-hidden": "true" }),
       el("span", { class: "chart-user-name" }, series.display_name),
-      el("strong", { title: `${durationLabel(series.total_seconds)} · ${series.session_count} sessions` }, durationLabel(series.total_seconds)),
+      el("strong", { title: `${durationLabel(series.total_seconds)} · ${series.session_count} completed sessions` }, durationLabel(series.total_seconds)),
     )));
     const max = Math.max(0, ...data.series.flatMap((series) => series.duration_seconds));
     const { ceiling, step } = chartScale(max);
     const plotWidth = WIDTH - LEFT - RIGHT, plotHeight = HEIGHT - TOP - BOTTOM;
     const baseline = TOP + plotHeight;
-    const chart = svg("svg", { viewBox: `0 0 ${WIDTH} ${HEIGHT}`, class: "focus-chart-svg", role: "group", "aria-label": "Both users' focused time by completion period" });
+    const chart = svg("svg", { viewBox: `0 0 ${WIDTH} ${HEIGHT}`, class: "focus-chart-svg", role: "group", "aria-label": "Both users' focused time by time interval" });
     const y = (seconds) => baseline - seconds / ceiling * plotHeight;
     for (let value = 0; value <= ceiling; value += step) {
       chart.append(svg("line", { x1: LEFT, x2: WIDTH - RIGHT, y1: y(value), y2: y(value), class: "chart-grid" }));
@@ -136,13 +136,13 @@ export function createFocusChart({ root, getToday = todayInTimezone, onSelection
         chart.append(svg("text", { x: center, y: baseline + 20, "text-anchor": "middle", class: "chart-axis" }, data.period === "day" ? bucket.label.slice(0, 5) : bucket.label));
       }
     }
-    chart.append(svg("text", { x: LEFT + plotWidth / 2, y: HEIGHT - 6, "text-anchor": "middle", class: "chart-axis chart-axis-title" }, `Completion ${data.bucket_unit}`));
+    chart.append(svg("text", { x: LEFT + plotWidth / 2, y: HEIGHT - 6, "text-anchor": "middle", class: "chart-axis chart-axis-title" }, `Focus by ${data.bucket_unit}`));
     ui.plot.replaceChildren(chart);
     ui.empty.hidden = max > 0;
     ui.detail.textContent = "Select a bar to compare exact durations.";
     ui.table.replaceChildren(el("table", { class: "chart-data-table" },
-      el("caption", { class: "sr-only" }, "Recorded focus duration by completion period"),
-      el("thead", {}, el("tr", {}, el("th", { scope: "col" }, "Completed"), ...data.series.map((s) => el("th", { scope: "col" }, s.display_name)))),
+      el("caption", { class: "sr-only" }, "Recorded focus duration by time interval"),
+      el("thead", {}, el("tr", {}, el("th", { scope: "col" }, "Interval"), ...data.series.map((s) => el("th", { scope: "col" }, s.display_name)))),
       el("tbody", {}, ...data.buckets.map((bucket, index) => el("tr", {}, el("th", { scope: "row" }, bucket.label), ...data.series.map((s) => el("td", {}, durationLabel(s.duration_seconds[index])))))),
     ));
     ui.updated.textContent = `Updated ${new Date(data.generated_at_utc).toLocaleTimeString()}`;

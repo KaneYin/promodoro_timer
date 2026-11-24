@@ -46,14 +46,15 @@ It is for study partners, remote coworkers, couples or friends who want a shared
 
 - **Calm focus view:** the green single-column design is preserved. Start hides statistics, the chart and leaderboards; Pause keeps this focused view. During a break or after returning to idle, the secondary content returns.
 
-- **Pomodoro timer:** persistent 25-minute focus / 5-minute break timer with pause/resume, reset and delayed-reopen recovery.
+- **Pomodoro timer:** persistent 25-minute focus / 5-minute break timer with pause/resume, reset and recovery from browser suspension.
 - **Count-up mode:** Stop & save records actual whole seconds as one session and automatically stops and saves at 2 hours. Modes cannot run simultaneously in the same browser origin.
+- **Active intervals:** both modes close a segment on **Pause** or a detected screen lock and open a new one on resume. When execution stops for 75 seconds or more, the timer pauses at the last saved checkpoint. After reopening or waking, press **Resume** to continue. Screen-lock detection relies on browser permission and support. Shorter suspensions may go undetected.
 - **Silent notifications:** opt-in browser notifications for focus/break completion. Use **Enable silent notifications** and allow the browser prompt. Unsupported browsers keep an in-page completion message. No audio is played.
 
 ### Stats and leaderboards
 
 - **Focus leaderboards:** local-day history and day/week/month leaderboards, including DST boundaries and competition ranks.
-- **Two-user focus chart:** shared bar chart below personal stats showing daily completion hours, weekly days and monthly Monday-aligned weeks. It opens the current period using the browser clock. The history menu lists only periods with recorded sessions. It uses fixed user colors and includes an accessible data table.
+- **Two-user focus chart:** shared bar chart below personal stats splitting active time into hours for the day, days for the week and Monday-aligned weeks for the month. It opens the current period using the browser clock. The history menu lists only periods with recorded sessions. It uses fixed user colors and includes an accessible data table.
 - **Focus personality:** a compact icon beside each name in Leaderboards describes the selected day, week or month. Hover over the icon (or focus it with the keyboard) to read its English name. Expand **Details** for a pie chart, each time window’s percentage and duration, and active days. **Rules ↗** opens a read-only explanation in a new tab. See [Focus Rhythm](docs/focus-rhythm.md) for the full definitions.
 - **Screen Time leaderboard:** ActivityWatch foreground-window time intersected with not-AFK time, with cumulative daily snapshots and historical backfill.
 - **Honest coverage:** screen data that is incomplete, stale or missing is displayed but never ranked.
@@ -78,7 +79,9 @@ Press **Start**: the surrounding content fades out, leaving the timer and sessio
 
 In **Focus comparison**, choose **Daily**, **Weekly** or **Monthly**, then select a current or recorded period from the date menu. Leaderboards and both users’ personality icons follow that selection. The period buttons in Leaderboards also update the chart. The **Your stats** summary keeps showing today and this week.
 
-<img src="docs/images/history.png" alt="Daily focus comparison with November 13, 2026 selected from the history menu" width="560" />
+<img src="docs/images/history.png" alt="Example daily focus chart for November 13, 2026 showing active focus split across hourly intervals" width="560" />
+
+The sample session from 22:20 to 00:10 produces two bars on November 13 (40 minutes at 22:00 and 60 minutes at 23:00). The last 10 minutes appear on November 14.
 
 ### A small icon beside each name
 
@@ -114,7 +117,7 @@ A window needs **at least 50%** of focus time and a lead of **at least 15 percen
 
 </details>
 
-Completed sessions are split across time windows and midnight for personality calculations. Pauses and breaks are excluded for new records; older records use estimated timing disclosed in Details. Chart and ranking totals use session completion dates, so their totals can differ from the personality breakdown at calendar boundaries.
+Personal focus totals, charts, rankings and personality details use the intervals when focus was active. For example, focus from 23:50 to 00:10 contributes 10 minutes to each day in America/Chicago. Pauses and breaks are excluded from new records. Older records without intervals use an estimate based on their saved start, end and focus duration. **Details** shows the estimated amount.
 
 ## How it works
 
@@ -136,8 +139,8 @@ flowchart LR
     S -. "Tailscale Serve" .- BB
 ```
 
-1. The browser runs the timer locally and queues each completed session in an outbox.
-2. The outbox posts sessions to the FastAPI server, which validates, deduplicates and stores them in SQLite.
+1. The browser records each interval locally and queues the completed session and its intervals together.
+2. FastAPI validates and deduplicates the upload, then writes the session and its intervals in one SQLite transaction.
 3. On each Mac, the agent reads ActivityWatch and uploads cumulative daily screen time for that device.
 4. The page polls the API for stats, the comparison chart, the selected period’s focus personalities and leaderboards.
 
@@ -160,7 +163,7 @@ uv run --no-sync uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 Complete a timer session, then confirm the outbox clears and Focus totals update. Cancelled sessions and breaks are excluded. For a faster local check, start the server with `FOCUS_MIN_TARGET_SECONDS=1` and open `/?focus=10&break=5`; restore the normal minimum afterwards.
 
-For open-ended work, select **Count up**, start, then **Stop & save** (also available while paused). Sessions shorter than one second are not saved. Focus totals and session counts update through the same offline outbox. Dates use the completion day in America/Chicago. Startup automatically migrates existing database rows to `mode="pomodoro"` without deleting history.
+For open-ended work, select **Count up**, start, then **Stop & save** (also available while paused). Sessions shorter than one second are not saved. Focus totals and session counts update after syncing. **Sessions today** counts sessions completed today in America/Chicago. **Focus today** sums active intervals within the day. Startup automatically migrates existing database rows to `mode="pomodoro"` without deleting history.
 
 Notifications require HTTPS or localhost, browser permission and support for the silent option. They fire when the loaded page processes a completion; closed or suspended pages cannot guarantee an on-time alert. A notification-only service worker supports delivery where available, without adding offline caching or a background timer.
 

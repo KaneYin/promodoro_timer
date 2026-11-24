@@ -1,6 +1,6 @@
 # Focus Tracker
 
-> Focus Tracker is an open-source, self-hosted Pomodoro and count-up focus timer for two people. It records completed focus sessions in SQLite and ranks both users on daily, weekly and monthly Focus leaderboards. An optional agent reads ActivityWatch on each Mac to add a Screen Time leaderboard. Built with Python 3.12+, FastAPI, SQLite and vanilla JavaScript (no build step, no accounts), and shared privately over Tailscale Serve.
+> Focus Tracker is an open-source, self-hosted Pomodoro and count-up focus timer for two people. It records completed sessions and their active intervals in SQLite and ranks both users on daily, weekly and monthly Focus leaderboards. An optional agent reads ActivityWatch on each Mac to add a Screen Time leaderboard. Built with Python 3.12+, FastAPI, SQLite and vanilla JavaScript (no build step, no accounts), and shared privately over Tailscale Serve.
 
 Key facts:
 
@@ -8,6 +8,7 @@ Key facts:
 
 - Default timer: 25-minute focus / 5-minute break. Count-up mode saves actual seconds and stops automatically at 2 hours.
 - Two trusted users, no authentication. The server binds to 127.0.0.1. Tailscale Funnel must not be used.
+- Both timer modes split active time around pauses, detected screen locks, and prolonged browser suspension. Charts and rankings attribute durations to the hours or dates where focus happened, with legacy timing estimated.
 - Completed sessions go through an offline browser outbox with retry and UUID deduplication.
 - Screen time is ActivityWatch foreground-window time intersected with not-AFK time. It is not Apple Screen Time. Incomplete or stale days are shown but never ranked.
 - Focus personality icons beside both leaderboard names describe the selected day, week or month in America/Chicago. Hover/focus shows names, Details shows pie-chart shares, and Rules opens the static explanation page. Historical date and period controls are synchronized with the comparison chart.

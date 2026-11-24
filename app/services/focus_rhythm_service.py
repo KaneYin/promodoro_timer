@@ -1,17 +1,12 @@
-"""Time-of-day rhythms, independent of the chart's completion attribution.
-
-New records use active intervals. Legacy focus seconds are spread uniformly
-over the recorded wall-clock span and always marked as estimated. No historical
-row is rewritten. Credit is clipped to the requested local calendar window.
-"""
+"""Time-of-day rhythms based on active intervals and disclosed legacy estimates."""
 
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from app import config
 from app.periods import PeriodWindow
 from app.schemas import FocusRhythm, FocusRhythmWindow
-from app.timeutil import parse_utc_iso, to_utc_iso
+from app.services.focus_intervals import load_focus_intervals
 
 # Chronological from 02:00; all windows are half-open and four hours long.
 WINDOWS = (
@@ -25,7 +20,9 @@ WINDOWS = (
 MINIMUMS = {"day": (1500, 1), "week": (6000, 3), "month": (18000, 7)}
 
 
-def classify(seconds: list[float], active_days: int, period: str) -> tuple[str, str, str]:
+def classify(
+    seconds: list[float], active_days: int, period: str
+) -> tuple[str, str, str]:
     total = sum(seconds)
     minimum, days = MINIMUMS[period]
     if total <= 0:
@@ -40,46 +37,34 @@ def classify(seconds: list[float], active_days: int, period: str) -> tuple[str, 
     return "flexible", "Flexible Focuser", "🎨"
 
 
-def get_focus_rhythms(conn: sqlite3.Connection, window: PeriodWindow) -> dict[int, FocusRhythm]:
-    rows = conn.execute(
-        """SELECT f.id, f.user_id, f.started_at_utc, f.completed_at_utc,
-                  f.focus_seconds, s.started_at_utc AS segment_start,
-                  s.ended_at_utc AS segment_end
-           FROM focus_sessions f LEFT JOIN focus_session_segments s ON s.session_id = f.id
-           WHERE f.started_at_utc < ? AND f.completed_at_utc >= ?
-           ORDER BY f.id, s.position""",
-        (to_utc_iso(window.end_utc), to_utc_iso(window.start_utc)),
-    ).fetchall()
-    sessions = {}
-    for row in rows:
-        item = sessions.setdefault(row["id"], {"row": row, "segments": []})
-        if row["segment_start"] is not None:
-            item["segments"].append((datetime.fromisoformat(row["segment_start"]), datetime.fromisoformat(row["segment_end"])))
+def get_focus_rhythms(
+    conn: sqlite3.Connection, window: PeriodWindow
+) -> dict[int, FocusRhythm]:
     totals = {}
-    for item in sessions.values():
-        row, segments = item["row"], item["segments"]
-        estimated = not segments
-        if estimated:
-            segments = [(parse_utc_iso(row["started_at_utc"]), parse_utc_iso(row["completed_at_utc"]))]
+    for session in load_focus_intervals(conn, window.start_utc, window.end_utc):
+        segments = session.segments
         span = sum((end - start).total_seconds() for start, end in segments)
         if span <= 0:
             continue
-        # Remove the discarded subsecond fraction of count-up sessions without
-        # shifting any interval into pauses or changing its time-of-day shares.
-        weight = row["focus_seconds"] / span
-        values, days, estimate = totals.setdefault(row["user_id"], ([0.0] * 6, set(), [0.0]))
+        # Remove discarded subsecond time without changing time-of-day shares.
+        weight = session.seconds / span
+        values, days, estimate = totals.setdefault(
+            session.user_id, ([0.0] * 6, set(), [0.0])
+        )
         for start, end in segments:
             start, end = max(start, window.start_utc), min(end, window.end_utc)
             while start < end:
                 # Chicago offsets are whole hours. UTC stepping handles both
                 # repeated fall-back hours and nonexistent spring-forward hours.
-                boundary = start.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+                boundary = start.replace(minute=0, second=0, microsecond=0) + timedelta(
+                    hours=1
+                )
                 stop = min(end, boundary)
                 local = start.astimezone(config.LEADERBOARD_TZ)
                 credit = (stop - start).total_seconds() * weight
                 values[((local.hour - 2) % 24) // 4] += credit
                 days.add(local.date())
-                if estimated:
+                if session.estimated:
                     estimate[0] += credit
                 start = stop
     result = {}
@@ -89,12 +74,24 @@ def get_focus_rhythms(conn: sqlite3.Connection, window: PeriodWindow) -> dict[in
         total = sum(values)
         key, label, emoji = classify(values, len(days), window.period)
         result[user["id"]] = FocusRhythm(
-            key=key, label=label, emoji=emoji, total_seconds=total,
-            active_days=len(days), minimum_seconds=minimum, minimum_days=minimum_days,
+            key=key,
+            label=label,
+            emoji=emoji,
+            total_seconds=total,
+            active_days=len(days),
+            minimum_seconds=minimum,
+            minimum_days=minimum_days,
             estimated_seconds=estimate[0],
-            windows=[FocusRhythmWindow(
-                key=definition[0], label=definition[1], emoji=definition[2], time_range=definition[3],
-                duration_seconds=seconds, share=seconds / total if total else 0,
-            ) for definition, seconds in zip(WINDOWS, values)],
+            windows=[
+                FocusRhythmWindow(
+                    key=definition[0],
+                    label=definition[1],
+                    emoji=definition[2],
+                    time_range=definition[3],
+                    duration_seconds=seconds,
+                    share=seconds / total if total else 0,
+                )
+                for definition, seconds in zip(WINDOWS, values)
+            ],
         )
     return result
